@@ -1,0 +1,8 @@
+## Interface: 11508
+## Title: Classic Era Finder
+## Notes: LFG/LFM a partir do chat — UI própria, sem templates Blizzard.
+## Version: 1.0.0
+## Author: ClassicEraFinder
+## SavedVariables: ClassicEraFinderDB
+
+ClassicEraFinder.xml

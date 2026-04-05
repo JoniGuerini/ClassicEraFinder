@@ -1,0 +1,15 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
+	<Script file="ClassicEraFinder.Constants.lua"/>
+	<Script file="ClassicEraFinder.Instances.lua"/>
+	<Script file="ClassicEraFinder.Messages.lua"/>
+	<Script file="ClassicEraFinder.Filters.lua"/>
+	<Script file="ClassicEraFinder.DB.lua"/>
+	<Script file="ClassicEraFinder.Entries.lua"/>
+	<Script file="ClassicEraFinder.UIUtils.lua"/>
+	<Script file="ClassicEraFinder.UILayout.lua"/>
+	<Script file="ClassicEraFinder.UIEngine.lua"/>
+       	<Script file="ClassicEraFinder.UI.lua"/>
+	<Script file="ClassicEraFinder.Minimap.lua"/>
+	<Script file="ClassicEraFinder.UIFilters.lua"/>
+	<Script file="ClassicEraFinder.lua"/>
+</Ui>
