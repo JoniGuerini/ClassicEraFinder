@@ -198,17 +198,48 @@ function CEF.UI.createMainUI()
     maxRowPool      = FILTER_MENU_MAX_ROWS,
     maxVisibleRows  = 11,
     supportsHeaders = true,
+    multiSelect     = true,
+    isSelected      = function(opt)
+      return CEF.instanceFilterIsSelected(opt.key, st().filterInstanceKey)
+    end,
     getOptions      = function() return CEF.INSTANCE_FILTER_MENU_OPTS end,
     renderRow       = function(opt) return CEF.instanceFilterOptionRichText(opt.key) end,
-    renderSummary   = function() return CEF.instanceFilterOptionRichText(st().filterInstanceKey) end,
+    renderSummary   = function() return CEF.instanceFilterSummaryRichText(st().filterInstanceKey) end,
     onOpen          = function()
       CEF.UIFilters.hideFilterIntentMenu(f)
       CEF.UIFilters.hideFilterRoleMenu(f)
     end,
     onSelect        = function(opt, ctx)
-      st().filterInstanceKey = opt.key
+      local state = st()
+      local key = opt.key
+      if key == false then
+        -- "All instances" — limpa o filtro.
+        state.filterInstanceKey = false
+      elseif key == "__classic__" or key == "__tbc__" then
+        -- Atalho de expansão: toggle.
+        if state.filterInstanceKey == key then
+          state.filterInstanceKey = false
+        else
+          state.filterInstanceKey = key
+        end
+      else
+        -- Instância individual: toggle no set.
+        local cur = state.filterInstanceKey
+        if type(cur) ~= "table" then
+          cur = {}
+        end
+        if cur[key] then
+          cur[key] = nil
+          if not next(cur) then
+            cur = false
+          end
+        else
+          cur[key] = true
+        end
+        state.filterInstanceKey = cur
+      end
       ctx.updateSummary()
-      CEF.UIFilters.hideAllFilterDropdowns(f)
+      ctx.refreshSelection()
       if scrollFrame then scrollFrame:SetVerticalScroll(0) end
       CEF.UI.refreshUI()
     end,
@@ -303,7 +334,7 @@ function CEF.UI.createMainUI()
     st().filterIntentKey = false
     st().filterRoleKey = false
     st().filterSearchText = ""
-    CEF.UIFilters.updateFilterDropSummary(filterDropSummaryFS, false)
+    filterDropSummaryFS:SetText(CEF.instanceFilterSummaryRichText(false))
     CEF.UIFilters.updateIntentFilterDropSummary(filterIntentDropSummaryFS, false)
     CEF.UIFilters.updateRoleFilterDropSummary(filterRoleDropSummaryFS, false)
     searchEdit:SetText("")

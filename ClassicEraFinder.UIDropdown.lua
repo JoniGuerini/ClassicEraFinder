@@ -58,6 +58,8 @@ function UID.build(config)
   local maxRowPool    = config.maxRowPool or 12
   local maxVisibleRows = config.maxVisibleRows or 8
   local supportsHeaders = config.supportsHeaders == true
+  local multiSelect   = config.multiSelect == true
+  local isSelected    = config.isSelected           -- function(opt) → bool (multi-select visual)
   local getOptions    = assert(config.getOptions, "UIDropdown.build: getOptions required")
   local renderRow     = assert(config.renderRow,  "UIDropdown.build: renderRow required")
   local renderSummary = assert(config.renderSummary, "UIDropdown.build: renderSummary required")
@@ -149,14 +151,25 @@ function UID.build(config)
 
   local rowBg        = RGBA.dropdownRowBg or { 0.13, 0.11, 0.09, 0.96 }
   local rowBgHover   = RGBA.dropdownRowBgHover or { 0.26, 0.2, 0.14, 1 }
+  local rowBgSelected = RGBA.dropdownRowBgSelected or { 0.20, 0.16, 0.10, 1 }
   local headerBg     = RGBA.dropdownHeaderBg or { 0.08, 0.07, 0.06, 1 }
   local headerTextRGB = RGB.dropdownHeaderText or { 1, 0.82, 0.18 }
   local rowTextRGB    = RGB.dropdownRowText or { 1, 1, 1 }
+  local selectedTextRGB = RGB.dropdownSelectedText or { 1, 0.82, 0.18 }
+
+  -- Fundo base de cada row: selecionado ou normal.
+  local function rowBaseBg(row)
+    if row.cefSelected then
+      return rowBgSelected
+    end
+    return rowBg
+  end
 
   for i = 1, maxRowPool do
     local row = CreateFrame("Button", nil, child)
     row:SetHeight(rowHeight)
     row.isHeader = false
+    row.cefSelected = false
 
     local bg = row:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
@@ -174,7 +187,7 @@ function UID.build(config)
         applyTex(bg, headerBg)
         return
       end
-      applyTex(bg, rowBg)
+      applyTex(bg, rowBaseBg(row))
     end)
 
     local lab = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -199,7 +212,7 @@ function UID.build(config)
   -- ==========================================================================
   -- Refresh: popula rows a partir de getOptions()
   -- ==========================================================================
-  local function refresh()
+  local function refresh(keepScroll)
     menu:SetWidth(button:GetWidth())
     local mw = menu:GetWidth()
     local labelW = math.max(40, mw - 24)
@@ -226,8 +239,17 @@ function UID.build(config)
           row.isHeader = false
           row:EnableMouse(true)
           row.option = entry
-          applyTex(row.bg, rowBg)
-          row.label:SetTextColor(rowTextRGB[1], rowTextRGB[2], rowTextRGB[3])
+
+          -- Multi-select: destacar rows selecionadas.
+          local sel = multiSelect and isSelected and isSelected(entry)
+          row.cefSelected = sel and true or false
+          if sel then
+            applyTex(row.bg, rowBgSelected)
+            row.label:SetTextColor(selectedTextRGB[1], selectedTextRGB[2], selectedTextRGB[3])
+          else
+            applyTex(row.bg, rowBg)
+            row.label:SetTextColor(rowTextRGB[1], rowTextRGB[2], rowTextRGB[3])
+          end
           row.label:SetText(renderRow(entry) or "")
         end
 
@@ -242,7 +264,33 @@ function UID.build(config)
     child:SetHeight(math.max(rowHeight, n * rowHeight))
     local vis = math.min(maxVisibleRows, math.max(1, n))
     menu:SetHeight(8 + vis * rowHeight)
-    scroll:SetVerticalScroll(0)
+    if not keepScroll then
+      scroll:SetVerticalScroll(0)
+    end
+  end
+
+  local function refreshKeepScroll()
+    menu:SetWidth(button:GetWidth())
+    local mw = menu:GetWidth()
+    local labelW = math.max(40, mw - 24)
+    local opts = getOptions() or {}
+    for i = 1, maxRowPool do
+      local row = rows[i]
+      if i <= #opts then
+        local entry = opts[i]
+        if not (supportsHeaders and entry.kind == "hdr") then
+          local sel = multiSelect and isSelected and isSelected(entry)
+          row.cefSelected = sel and true or false
+          if sel then
+            applyTex(row.bg, rowBgSelected)
+            row.label:SetTextColor(selectedTextRGB[1], selectedTextRGB[2], selectedTextRGB[3])
+          else
+            applyTex(row.bg, rowBg)
+            row.label:SetTextColor(rowTextRGB[1], rowTextRGB[2], rowTextRGB[3])
+          end
+        end
+      end
+    end
   end
 
   local function close()
@@ -253,9 +301,10 @@ function UID.build(config)
     button    = button,
     menu      = menu,
     summaryFS = summaryFS,
-    refresh   = refresh,
-    close     = close,
-    updateSummary = function()
+    refresh          = refresh,
+    refreshSelection = refreshKeepScroll,
+    close            = close,
+    updateSummary    = function()
       summaryFS:SetText(renderSummary())
     end,
   }

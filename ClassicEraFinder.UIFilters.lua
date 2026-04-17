@@ -64,7 +64,7 @@ end
 
 function UI.updateFilterDropSummary(filterDropSummaryFS, filterInstanceKey)
   if filterDropSummaryFS then
-    filterDropSummaryFS:SetText(CEF.instanceFilterOptionRichText(filterInstanceKey))
+    filterDropSummaryFS:SetText(CEF.instanceFilterSummaryRichText(filterInstanceKey))
   end
 end
 

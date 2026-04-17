@@ -19,6 +19,8 @@ local P = CEF.MessagePatterns
 P.RECRUIT_FIRST_WORDS_LIST = {
   -- funções
   "tank", "tanks", "heal", "heals", "healer", "healers", "dps", "rdps", "mdps",
+  -- estilos de dano / papel genérico
+  "aoe", "ranged", "range", "melee", "caster", "casters", "pumper", "pumpers",
   -- classes e plurais
   "mage", "mages", "lock", "locks", "warlock", "warlocks",
   "priest", "priests", "pala", "paladin", "paladins", "pally", "pallies",

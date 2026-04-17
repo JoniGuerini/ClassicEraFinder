@@ -40,6 +40,9 @@ L["actionWhisper"] = "Whisper"
 
 -- Dropdown de instância
 L["allInstances"] = "All instances"
+L["allClassic"] = "Classic"
+L["allTbc"] = "TBC"
+L["instancesSelected"] = "instances"
 L["dungeons"] = "Dungeons"
 L["raids"] = "Raids"
 L["tbcDungeons"] = "TBC — dungeons"

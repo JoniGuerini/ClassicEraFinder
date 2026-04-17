@@ -26,15 +26,20 @@ local COLOR_ERA_TBC_COL           = Hex.eraTbc      or "|cff33cc33"
 -- ============================================================================
 local INSTANCE_KEY_EXPANSION = {}
 local INSTANCE_KEY_IS_RAID   = {}
+local INSTANCE_KEY_NEEDLES   = {}
 for _, row in ipairs(INSTANCE_ROWS) do
   local k = row.key
   if not INSTANCE_KEY_EXPANSION[k] then
     INSTANCE_KEY_EXPANSION[k] = row.expansion or "classic"
+    INSTANCE_KEY_NEEDLES[k] = row.needles or {}
   end
   if row.kind == "raid" then
     INSTANCE_KEY_IS_RAID[k] = true
   end
 end
+
+-- Expor para consumo por filtros/UI (multi-select por expansão).
+CEF.INSTANCE_KEY_EXPANSION = INSTANCE_KEY_EXPANSION
 
 local function instanceMinLevelForSort(instanceKey)
   local plain = INSTANCE_LEVEL_RANGE[instanceKey]
@@ -95,6 +100,10 @@ do
   local opts = {}
   local L = CEF.L or {}
   opts[#opts + 1] = { kind = "opt", key = false }
+  opts[#opts + 1] = { kind = "opt", key = "__classic__" }
+  if #tbcDungeons > 0 or #tbcRaids > 0 then
+    opts[#opts + 1] = { kind = "opt", key = "__tbc__" }
+  end
   opts[#opts + 1] = { kind = "hdr", text = L["dungeons"] or "Dungeons" }
   for _, k in ipairs(classicDungeons) do
     opts[#opts + 1] = { kind = "opt", key = k }
@@ -211,8 +220,65 @@ function CEF.instanceFilterOptionRichText(instKey)
   if instKey == false or instKey == nil then
     return "|cffffffff" .. (L["allInstances"] or "All instances") .. "|r"
   end
+  if instKey == "__classic__" then
+    return COLOR_ERA_CLASSIC_COL .. (L["allClassic"] or "Classic") .. "|r"
+  end
+  if instKey == "__tbc__" then
+    return COLOR_ERA_TBC_COL .. (L["allTbc"] or "TBC") .. "|r"
+  end
   local displayName = CEF.LocalizeInstance and CEF.LocalizeInstance(instKey) or instKey
   return instanceNameRichOpenTag(instKey) .. displayName .. "|r  " .. recommendedLevelRichText(instKey)
+end
+
+-- Resumo do botão dropdown quando o filtro é multi-select (tabela de keys).
+function CEF.instanceFilterSummaryRichText(filterState)
+  local L = CEF.L or {}
+  if filterState == false or filterState == nil then
+    return "|cffffffff" .. (L["allInstances"] or "All instances") .. "|r"
+  end
+  if type(filterState) == "string" then
+    return CEF.instanceFilterOptionRichText(filterState)
+  end
+  if type(filterState) == "table" then
+    -- Contar entradas selecionadas.
+    local keys = {}
+    for k in pairs(filterState) do
+      keys[#keys + 1] = k
+    end
+    if #keys == 0 then
+      return "|cffffffff" .. (L["allInstances"] or "All instances") .. "|r"
+    end
+    if #keys == 1 then
+      return CEF.instanceFilterOptionRichText(keys[1])
+    end
+    if #keys <= 3 then
+      local parts = {}
+      for _, k in ipairs(keys) do
+        local name = CEF.LocalizeInstance and CEF.LocalizeInstance(k) or k
+        parts[#parts + 1] = name
+      end
+      return "|cffffff99" .. table.concat(parts, ", ") .. "|r"
+    end
+    return "|cffffff99" .. #keys .. " " .. (L["instancesSelected"] or "instances") .. "|r"
+  end
+  return CEF.instanceFilterOptionRichText(filterState)
+end
+
+-- Verifica se uma opção do dropdown está selecionada no estado atual.
+function CEF.instanceFilterIsSelected(optKey, filterState)
+  if optKey == false then
+    return filterState == false or filterState == nil
+  end
+  if optKey == "__classic__" then
+    return filterState == "__classic__"
+  end
+  if optKey == "__tbc__" then
+    return filterState == "__tbc__"
+  end
+  if type(filterState) == "table" then
+    return filterState[optKey] == true
+  end
+  return false
 end
 
 -- ============================================================================
@@ -388,12 +454,33 @@ local function entryInstancesList(e)
   return {}
 end
 
-function CEF.entryHasInstance(e, key)
-  if not key or key == false then
+function CEF.entryHasInstance(e, filterState)
+  if not filterState or filterState == false then
     return true
   end
-  for _, k in ipairs(entryInstancesList(e)) do
-    if k == key then
+  local list = entryInstancesList(e)
+  -- Filtro por expansão (string especial "__classic__" / "__tbc__").
+  if filterState == "__classic__" or filterState == "__tbc__" then
+    local wantExp = (filterState == "__classic__") and "classic" or "tbc"
+    for _, k in ipairs(list) do
+      if (INSTANCE_KEY_EXPANSION[k] or "classic") == wantExp then
+        return true
+      end
+    end
+    return false
+  end
+  -- Multi-select (tabela { [key] = true }).
+  if type(filterState) == "table" then
+    for _, k in ipairs(list) do
+      if filterState[k] then
+        return true
+      end
+    end
+    return false
+  end
+  -- Single key (string comum).
+  for _, k in ipairs(list) do
+    if k == filterState then
       return true
     end
   end
@@ -440,12 +527,34 @@ end
 
 function CEF.entryInstancesSearchBlob(e)
   local list = entryInstancesList(e)
-  if #list == 0 then
-    return strlower(e.instance or "")
-  end
   local parts = {}
+  -- Nome da instância (key enUS) + expansão + locale + needles.
   for _, k in ipairs(list) do
     parts[#parts + 1] = strlower(k)
+    -- Expansão (classic / tbc) — permite buscar "classic" ou "tbc" na search.
+    local exp = INSTANCE_KEY_EXPANSION[k] or "classic"
+    parts[#parts + 1] = exp
+    -- Nome localizado (ptBR etc.).
+    if CEF.LocalizeInstance then
+      local loc = CEF.LocalizeInstance(k)
+      if loc and loc ~= k then
+        parts[#parts + 1] = strlower(loc)
+      end
+    end
+    -- Needles / abreviações (brd, sm, ubrs, etc.).
+    local needles = INSTANCE_KEY_NEEDLES[k]
+    if needles then
+      for _, n in ipairs(needles) do
+        parts[#parts + 1] = n
+      end
+    end
+  end
+  -- Texto original da mensagem (permite buscar por termos livres).
+  if e.text and e.text ~= "" then
+    parts[#parts + 1] = strlower(e.text)
+  end
+  if #parts == 0 then
+    return strlower(e.instance or "")
   end
   return table.concat(parts, " ")
 end

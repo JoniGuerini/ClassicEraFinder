@@ -150,6 +150,12 @@ function CEF.classifyMessageIntent(text)
     if firstWord and RECRUIT_FIRST_WORDS[firstWord] then
       return true
     end
+    -- "lf 1 aoe", "lf 2 dps", "lf 1 tank" — número + role/estilo de dano.
+    -- O número indica quantas vagas restam → recrutamento.
+    local afterNum = t:match("lf%s+%d+%s+([%a]+)")
+    if afterNum and RECRUIT_FIRST_WORDS[afterNum] then
+      return true
+    end
     return false
   end
 

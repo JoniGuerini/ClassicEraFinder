@@ -14,13 +14,14 @@ function UI.columnWidths(totalW)
   local CC = cfg()
   local innerTotal = math.max(280 + CC.INSTANCE_LEVELS_TO_MSG_GAP, totalW - 2 * CC.TABLE_PAD)
   local inner = innerTotal - CC.INSTANCE_LEVELS_TO_MSG_GAP
-  -- c1 = instância; c2 = Classic/TBC; c3–c6 = mensagem, personagem, tempo, ação.
+  -- c1 = instância; c2 = Classic/TBC; c3 = mensagem; c4 = personagem;
+  -- c5 = tempo; c6 = ação.
   local c1 = inner * 0.175
   local c2 = inner * 0.075
   local c3 = inner * 0.285
   local c4 = inner * 0.155
-  local c5 = inner * 0.11
-  local c6 = inner * 0.20
+  local c5 = inner * 0.110
+  local c6 = inner * 0.200
   local x1 = CC.TABLE_PAD
   local x2 = x1 + c1 + CC.COL_GAP
   local x3 = x2 + c2 + CC.INSTANCE_LEVELS_TO_MSG_GAP
