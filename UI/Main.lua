@@ -79,7 +79,7 @@ function CEF.UI.createMainUI()
   local function closeMainWindow()
     CEF.UIUtils.cefTooltipHide()
     if f.cefApplyNavTab then
-      f.cefApplyNavTab("list")
+      f.cefApplyNavTab("home")
     end
     CEF.UIFilters.hideAllFilterDropdowns(f)
     if f.cefLeaveFullscreenIfNeeded then
@@ -121,7 +121,7 @@ function CEF.UI.createMainUI()
   end)
 
   local NAV_H = 30
-  local TAB_BTN_W = 96
+  local TAB_BTN_W = 88
   local TAB_BTN_H = 24
 
   local navBar = CreateFrame("Frame", nil, f)
@@ -149,14 +149,16 @@ function CEF.UI.createMainUI()
     return b
   end
 
-  local btnLista = makeNavTabButton(navBar, 8, CEF.L.TAB_LIST)
-  local btnLfg = makeNavTabButton(navBar, 8 + TAB_BTN_W + 4, CEF.L.TAB_LFG)
-  local btnGuilda = makeNavTabButton(navBar, 8 + (TAB_BTN_W + 4) * 2, CEF.L.TAB_GUILD)
-  local btnMensagens = makeNavTabButton(navBar, 8 + (TAB_BTN_W + 4) * 3, CEF.L.TAB_MESSAGES)
-  local btnGrupo = makeNavTabButton(navBar, 8 + (TAB_BTN_W + 4) * 4, CEF.L.TAB_GROUP)
+  local btnHome = makeNavTabButton(navBar, 8, CEF.L.TAB_HOME or "Home")
+  local btnLista = makeNavTabButton(navBar, 8 + (TAB_BTN_W + 4) * 1, CEF.L.TAB_LIST)
+  local btnLfg = makeNavTabButton(navBar, 8 + (TAB_BTN_W + 4) * 2, CEF.L.TAB_LFG)
+  local btnGuilda = makeNavTabButton(navBar, 8 + (TAB_BTN_W + 4) * 3, CEF.L.TAB_GUILD)
+  local btnMensagens = makeNavTabButton(navBar, 8 + (TAB_BTN_W + 4) * 4, CEF.L.TAB_MESSAGES)
+  local btnGrupo = makeNavTabButton(navBar, 8 + (TAB_BTN_W + 4) * 5, CEF.L.TAB_GROUP)
   local btnTermos = makeNavTabButton(navBar, nil, CEF.L.TAB_TERMS)
   btnTermos:SetPoint("RIGHT", navBar, "RIGHT", -8, 0)
   f.cefNavBar = navBar
+  f.cefBtnHome = btnHome
   f.cefBtnLista = btnLista
   f.cefBtnLfg = btnLfg
   f.cefBtnGuilda = btnGuilda
@@ -1725,6 +1727,9 @@ function CEF.UI.createMainUI()
   if CEF.GroupUI and CEF.GroupUI.createPanels then
     CEF.GroupUI.createPanels(f, navBar)
   end
+  if CEF.HomeUI and CEF.HomeUI.createPanels then
+    CEF.HomeUI.createPanels(f, navBar)
+  end
   if f.guildFilterBar then
     f.guildFilterBar:SetFrameLevel(240)
   end
@@ -1774,6 +1779,7 @@ function CEF.UI.createMainUI()
   local function applyNavTab(which)
     local prevTab = f.cefNavTab
     f.cefNavTab = which
+    local isHome = which == "home"
     local isList = which == "list"
     local isLfg = which == "lfg"
     local isGuild = which == "guild"
@@ -1797,6 +1803,7 @@ function CEF.UI.createMainUI()
       end
     end
 
+    styleNavTab(btnHome, isHome)
     styleNavTab(btnLista, isList)
     styleNavTab(btnLfg, isLfg)
     styleNavTab(btnGuilda, isGuild)
@@ -1816,6 +1823,10 @@ function CEF.UI.createMainUI()
     end
     if f.lfgActivityBtn and CEF.UIFilters and CEF.UIFilters.setDropChevronOpen then
       CEF.UIFilters.setDropChevronOpen(f.lfgActivityBtn, false)
+    end
+
+    if f.homeRoot then
+      f.homeRoot:SetShown(isHome)
     end
 
     filterBar:SetShown(isList)
@@ -1854,7 +1865,17 @@ function CEF.UI.createMainUI()
     settingsTermsTableHeader:SetShown(isSettings)
     settingsScroll:SetShown(isSettings)
 
-    if isList then
+    if isHome then
+      if CEF.LFG and CEF.LFG.search then
+        local n = #(CEF.LFG.getResults and CEF.LFG.getResults() or {})
+        if n == 0 then
+          CEF.LFG.search()
+        end
+      end
+      if CEF.HomeUI and CEF.HomeUI.refresh then
+        CEF.HomeUI.refresh()
+      end
+    elseif isList then
       syncTableLayout()
       scrollFrame:SetScript("OnUpdate", function(self)
         self:SetScript("OnUpdate", nil)
@@ -1926,6 +1947,9 @@ function CEF.UI.createMainUI()
     end
   end
 
+  btnHome:SetScript("OnClick", function()
+    applyNavTab("home")
+  end)
   btnLista:SetScript("OnClick", function()
     applyNavTab("list")
   end)
@@ -1945,7 +1969,7 @@ function CEF.UI.createMainUI()
     applyNavTab("settings")
   end)
   f.cefApplyNavTab = applyNavTab
-  applyNavTab("list")
+  applyNavTab("home")
 
   f.cefIsFullscreen = false
   local fullscreenBtn = CreateFrame("Button", nil, titleBar)
@@ -1964,6 +1988,99 @@ function CEF.UI.createMainUI()
   fullscreenBtn:SetScript("OnLeave", function()
     if fullscreenBtn.cefFsIcon and fullscreenBtn.cefFsIcon.tex then
       fullscreenBtn.cefFsIcon.tex:SetVertexColor(1.0, 0.82, 0.0)
+    end
+  end)
+
+  -- Timer anti-AFK no header (só fullscreen): reseta ao mexer o personagem.
+  local AFK_IDLE_LIMIT = 5 * 60
+  local afkDeadline = 0
+  -- Avisos com 2 min e 1 min restantes (timer total = 5 min).
+  local afkWarnedAt = { [120] = false, [60] = false }
+  local afkWasMoving = false
+  local afkTimerFs = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  afkTimerFs:SetPoint("RIGHT", fullscreenBtn, "LEFT", -10, 0)
+  afkTimerFs:SetJustifyH("RIGHT")
+  afkTimerFs:Hide()
+  f.cefAfkTimerFs = afkTimerFs
+
+  local function formatAfkMmSs(sec)
+    sec = math.max(0, math.floor(sec + 0.5))
+    return string.format("%d:%02d", math.floor(sec / 60), sec % 60)
+  end
+
+  local function resetAfkIdleTimer()
+    afkDeadline = GetTime() + AFK_IDLE_LIMIT
+    afkWarnedAt[120] = false
+    afkWarnedAt[60] = false
+  end
+
+  local function stopAfkIdleTimer()
+    afkDeadline = 0
+    afkWasMoving = false
+    afkTimerFs:Hide()
+  end
+
+  local function paintAfkIdleTimer()
+    if not f.cefIsFullscreen or not f:IsShown() or afkDeadline <= 0 then
+      afkTimerFs:Hide()
+      return
+    end
+    local left = afkDeadline - GetTime()
+    if left < 0 then
+      left = 0
+    end
+    local timeStr = formatAfkMmSs(left)
+    local label = (CEF.L and CEF.L("AFK_TIMER_FMT", timeStr)) or ("Move: " .. timeStr)
+    if left <= 60 then
+      afkTimerFs:SetText("|cffff4444" .. label .. "|r")
+    elseif left <= 120 then
+      afkTimerFs:SetText("|cffffcc66" .. label .. "|r")
+    else
+      afkTimerFs:SetText("|cffbbbbbb" .. label .. "|r")
+    end
+    afkTimerFs:Show()
+
+    for _, threshold in ipairs({ 120, 60 }) do
+      if left <= threshold and not afkWarnedAt[threshold] then
+        afkWarnedAt[threshold] = true
+        local msg = (CEF.L and CEF.L("AFK_TIMER_WARN", timeStr))
+          or ("Move your character to avoid disconnect (" .. timeStr .. " left).")
+        print("|cffffcc66CEF:|r " .. msg)
+      end
+    end
+  end
+
+  local function playerIsMovingNow()
+    if IsPlayerMoving then
+      return IsPlayerMoving() and true or false
+    end
+    return (GetUnitSpeed and GetUnitSpeed("player") or 0) > 0
+  end
+
+  local function startAfkIdleTimer()
+    resetAfkIdleTimer()
+    afkWasMoving = playerIsMovingNow()
+    paintAfkIdleTimer()
+  end
+
+  f.cefTickAfkIdleTimer = function()
+    if not f.cefIsFullscreen or not f:IsShown() then
+      return
+    end
+    local moving = playerIsMovingNow()
+    if moving and not afkWasMoving then
+      resetAfkIdleTimer()
+    end
+    afkWasMoving = moving
+    paintAfkIdleTimer()
+  end
+
+  local afkMoveFrame = CreateFrame("Frame")
+  afkMoveFrame:RegisterEvent("PLAYER_STARTED_MOVING")
+  afkMoveFrame:SetScript("OnEvent", function()
+    if f.cefIsFullscreen and f:IsShown() then
+      resetAfkIdleTimer()
+      paintAfkIdleTimer()
     end
   end)
 
@@ -1998,6 +2115,7 @@ function CEF.UI.createMainUI()
     titleBar:SetScript("OnDragStop", nil)
     f.cefIsFullscreen = true
     setFullscreenBtnLook(true)
+    startAfkIdleTimer()
     syncTableLayout()
     if f.cefRelayoutSettingsTerms then
       f.cefRelayoutSettingsTerms()
@@ -2049,6 +2167,7 @@ function CEF.UI.createMainUI()
     end
     f.cefIsFullscreen = false
     setFullscreenBtnLook(false)
+    stopAfkIdleTimer()
     syncTableLayout()
     if f.cefRelayoutSettingsTerms then
       f.cefRelayoutSettingsTerms()
@@ -2122,6 +2241,12 @@ function CEF.UI.createMainUI()
       acc = 0
       if f:IsShown() then
         CEF.UI.refreshRelativeTimesOnly()
+        if f.cefTickAfkIdleTimer then
+          f.cefTickAfkIdleTimer()
+        end
+        if f.cefNavTab == "home" and CEF.HomeUI and CEF.HomeUI.refresh then
+          CEF.HomeUI.refresh()
+        end
       end
     end
   end)
@@ -2178,6 +2303,9 @@ function CEF.UI.createMainUI()
     if CEF.refreshRoleLocaleLabels then
       CEF.refreshRoleLocaleLabels()
     end
+    if btnHome and btnHome.fs then
+      btnHome.fs:SetText(CEF.L.TAB_HOME)
+    end
     if btnLista and btnLista.fs then
       btnLista.fs:SetText(CEF.L.TAB_LIST)
     end
@@ -2195,6 +2323,9 @@ function CEF.UI.createMainUI()
     end
     if btnTermos and btnTermos.fs then
       btnTermos.fs:SetText(CEF.L.TAB_TERMS)
+    end
+    if f.cefApplyHomeLocale then
+      f.cefApplyHomeLocale()
     end
     if CEF.LFGUI and CEF.LFGUI.refreshLocale then
       CEF.LFGUI.refreshLocale(f)

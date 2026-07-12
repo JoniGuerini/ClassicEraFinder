@@ -88,6 +88,68 @@ local INSTANCE_ROWS = {
   { key = "Ragefire Chasm", needles = { "ragefire", "rfc ", " rfc", "bazzalan" } },
 }
 
+-- ===== Season of Discovery =====
+-- Conteúdo exclusivo SoD: só entra na deteção/filtros/termos em realm SoD
+-- (Era e Hardcore não veem estas entradas).
+local SOD_INSTANCE_ROWS = {
+  { key = "Demon Fall Canyon", needles = { "demon fall", "demonfall", "dfc ", " dfc" } },
+  { key = "Karazhan Crypts", needles = { "karazhan", "kara crypt", "crypts" } },
+  { key = "Scarlet Enclave", needles = { "scarlet enclave", "enclave", "tse ", " tse" } },
+}
+
+-- Em SoD estas masmorras clássicas viram raids.
+local SOD_RAIDS = {
+  ["Blackfathom Deeps"] = true,
+  ["Gnomeregan"] = true,
+  ["Sunken Temple"] = true,
+  ["Scarlet Enclave"] = true,
+}
+
+-- Ranges recomendados diferentes em SoD (raids de leveling continuam rodando no 60).
+local SOD_LEVEL_RANGE = {
+  ["Blackfathom Deeps"] = "25-60",
+  ["Gnomeregan"] = "40-60",
+  ["Sunken Temple"] = "50-60",
+}
+
+local sodActiveCache = nil
+
+--- true em realm Season of Discovery (C_Seasons pode não estar pronto no load;
+--- só cacheia quando a API responde).
+function CEF.isSoDActive()
+  if sodActiveCache ~= nil then
+    return sodActiveCache
+  end
+  if not (C_Seasons and C_Seasons.GetActiveSeason) then
+    return false
+  end
+  local season = C_Seasons.GetActiveSeason()
+  if season == nil then
+    return false
+  end
+  local sodId = (Enum and Enum.SeasonID and Enum.SeasonID.SeasonOfDiscovery) or 2
+  sodActiveCache = (season == sodId)
+  return sodActiveCache
+end
+
+local INSTANCE_ROWS_WITH_SOD = nil
+
+local function activeInstanceRows()
+  if not CEF.isSoDActive() then
+    return INSTANCE_ROWS
+  end
+  if not INSTANCE_ROWS_WITH_SOD then
+    INSTANCE_ROWS_WITH_SOD = {}
+    for i, row in ipairs(INSTANCE_ROWS) do
+      INSTANCE_ROWS_WITH_SOD[i] = row
+    end
+    for _, row in ipairs(SOD_INSTANCE_ROWS) do
+      INSTANCE_ROWS_WITH_SOD[#INSTANCE_ROWS_WITH_SOD + 1] = row
+    end
+  end
+  return INSTANCE_ROWS_WITH_SOD
+end
+
 -- Raids (Classic Era); o restante em INSTANCE_ROWS conta como masmorra no filtro.
 local INSTANCE_RAIDS = {
   ["Naxxramas"] = true,
@@ -98,6 +160,13 @@ local INSTANCE_RAIDS = {
   ["Blackwing Lair"] = true,
   ["Onyxia"] = true,
 }
+
+local function keyIsRaid(instanceKey)
+  if INSTANCE_RAIDS[instanceKey] then
+    return true
+  end
+  return CEF.isSoDActive() and SOD_RAIDS[instanceKey] == true
+end
 
 -- Faixa de níveis recomendada (Classic Era / vanilla); só para referência na UI.
 local INSTANCE_LEVEL_RANGE = {
@@ -130,6 +199,10 @@ local INSTANCE_LEVEL_RANGE = {
   ["Ahn'Qiraj 20"] = "60",
   ["Ahn'Qiraj 40"] = "60",
   ["Naxxramas"] = "60",
+  -- Chaves exclusivas SoD (só aparecem com CEF.isSoDActive()).
+  ["Demon Fall Canyon"] = "55-60",
+  ["Karazhan Crypts"] = "60",
+  ["Scarlet Enclave"] = "60",
 }
 
 -- Nomes oficiais Blizzard (AreaTable / LFG), nunca tradução manual.
@@ -165,6 +238,10 @@ local INSTANCE_BLIZZARD_IDS = {
   ["Ahn'Qiraj 20"] = { areaId = 3429, lfgId = 160, lfgPrefer = true },
   ["Ahn'Qiraj 40"] = { areaId = 3428, lfgId = 161, lfgPrefer = true },
   ["Naxxramas"] = { areaId = 3456, lfgId = 159 },
+  -- SoD (AreaTable 1.15.x)
+  ["Demon Fall Canyon"] = { areaId = 15475 },
+  ["Karazhan Crypts"] = { areaId = 16074 },
+  ["Scarlet Enclave"] = { areaId = 16236 },
 }
 
 local displayNameCache = {}
@@ -229,6 +306,18 @@ function CEF.getInstanceDisplayName(instanceKey)
 
   local name = nameFromPack(instanceKey, localeCode)
 
+  -- Fallback: AreaTable localizada (ZoneNames) — cobre chaves sem pack próprio (ex.: SoD).
+  if not name then
+    local meta = INSTANCE_BLIZZARD_IDS[instanceKey]
+    if meta and meta.areaId and type(CEF.AREA_DISPLAY_NAMES) == "table" then
+      local areaPack = CEF.AREA_DISPLAY_NAMES[localeCode] or CEF.AREA_DISPLAY_NAMES.enUS
+      local n = areaPack and areaPack[meta.areaId]
+      if type(n) == "string" and n ~= "" then
+        name = n
+      end
+    end
+  end
+
   -- Fallback: APIs do cliente (só batem se o idioma do jogo = pack).
   if not name then
     local meta = INSTANCE_BLIZZARD_IDS[instanceKey]
@@ -256,7 +345,11 @@ end
 CEF.FILTER_INSTANCE_MY_LEVEL = "__cef_my_level__"
 
 local function instanceLevelRangeBounds(instanceKey)
-  local plain = INSTANCE_LEVEL_RANGE[instanceKey]
+  local plain
+  if CEF.isSoDActive() then
+    plain = SOD_LEVEL_RANGE[instanceKey]
+  end
+  plain = plain or INSTANCE_LEVEL_RANGE[instanceKey]
   if not plain then
     return nil, nil
   end
@@ -289,7 +382,7 @@ function CEF.countInstancesForPlayerLevel(playerLevel)
   local lvl = playerLevel or UnitLevel("player")
   local n = 0
   local seen = {}
-  for _, row in ipairs(INSTANCE_ROWS) do
+  for _, row in ipairs(activeInstanceRows()) do
     local k = row.key
     if not seen[k] then
       seen[k] = true
@@ -307,15 +400,18 @@ local function instanceMinLevelForSort(instanceKey)
 end
 
 -- Entradas do menu do filtro: opção (key false = todas) ou cabeçalho de secção.
+-- Reconstruído no PLAYER_LOGIN: em SoD entram as instâncias exclusivas e
+-- BFD/Gnomer/ST mudam para a secção de raids.
 CEF.INSTANCE_FILTER_MENU_OPTS = {}
-do
+
+function CEF.rebuildInstanceFilterMenuOpts()
   local dungeons, raids = {}, {}
   local seen = {}
-  for _, row in ipairs(INSTANCE_ROWS) do
+  for _, row in ipairs(activeInstanceRows()) do
     local k = row.key
     if not seen[k] then
       seen[k] = true
-      if INSTANCE_RAIDS[k] then
+      if keyIsRaid(k) then
         raids[#raids + 1] = k
       else
         dungeons[#dungeons + 1] = k
@@ -339,7 +435,8 @@ do
     return strlower(a) < strlower(b)
   end)
 
-  local opts = {}
+  local opts = CEF.INSTANCE_FILTER_MENU_OPTS
+  wipe(opts)
   opts[#opts + 1] = { kind = "opt", key = false }
   opts[#opts + 1] = { kind = "opt", key = CEF.FILTER_INSTANCE_MY_LEVEL }
   opts[#opts + 1] = { kind = "hdr", textKey = "CATEGORY_DUNGEONS" }
@@ -350,9 +447,9 @@ do
   for _, k in ipairs(raids) do
     opts[#opts + 1] = { kind = "opt", key = k }
   end
-
-  CEF.INSTANCE_FILTER_MENU_OPTS = opts
 end
+
+CEF.rebuildInstanceFilterMenuOpts()
 
 -- Laranja = nível mínimo do range, verde = nível máximo (|c … |r como no chat).
 local COLOR_LVL_ORANGE_MIN = "|cffff9933"
@@ -363,14 +460,14 @@ local COLOR_INSTANCE_DUNGEON_NAME = "|cff9fd3ff"
 local COLOR_INSTANCE_RAID_NAME = "|cffffb74d"
 
 local function instanceNameRichOpenTag(instanceKey)
-  if instanceKey and INSTANCE_RAIDS[instanceKey] then
+  if instanceKey and keyIsRaid(instanceKey) then
     return COLOR_INSTANCE_RAID_NAME
   end
   return COLOR_INSTANCE_DUNGEON_NAME
 end
 
 function CEF.instanceKeyIsRaid(instanceKey)
-  return instanceKey ~= nil and instanceKey ~= false and INSTANCE_RAIDS[instanceKey] == true
+  return instanceKey ~= nil and instanceKey ~= false and keyIsRaid(instanceKey)
 end
 
 local function formatLevelRangeColored(plain)
@@ -392,7 +489,11 @@ local function recommendedLevelRichText(instanceKey)
   if not instanceKey or instanceKey == "—" then
     return "—"
   end
-  local plain = INSTANCE_LEVEL_RANGE[instanceKey]
+  local plain
+  if CEF.isSoDActive() then
+    plain = SOD_LEVEL_RANGE[instanceKey]
+  end
+  plain = plain or INSTANCE_LEVEL_RANGE[instanceKey]
   if not plain then
     return "—"
   end
@@ -448,11 +549,11 @@ end
 function CEF.getInstanceDetectionRowsGroupedSorted()
   local d, r = {}, {}
   local seen = {}
-  for _, row in ipairs(INSTANCE_ROWS) do
+  for _, row in ipairs(activeInstanceRows()) do
     local k = row.key
     if not seen[k] then
       seen[k] = true
-      if INSTANCE_RAIDS[k] then
+      if keyIsRaid(k) then
         r[#r + 1] = row
       else
         d[#d + 1] = row
@@ -609,7 +710,7 @@ function CEF.detectInstances(text)
     return {}
   end
   local hits = {}
-  for _, row in ipairs(INSTANCE_ROWS) do
+  for _, row in ipairs(activeInstanceRows()) do
     local bestPos
     for _, n in ipairs(row.needles) do
       local pos = lower:find(n, 1, true)
@@ -751,7 +852,7 @@ end
 -- Leitura para a UI “Termos” (somente referência; listas são as mesmas usadas na deteção).
 function CEF.getInstanceDetectionCatalog()
   return {
-    rows = INSTANCE_ROWS,
+    rows = activeInstanceRows(),
     scarletGeneric = SCARLET_GENERIC_NEEDLES,
     scarletGenericUiHints = {
       CEF.L.TERMS_SM_AUTO_HINT,

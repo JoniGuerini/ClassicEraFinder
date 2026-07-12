@@ -266,6 +266,15 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
       end
     end
   elseif event == "PLAYER_LOGIN" then
+    -- Temporada/realm já disponíveis: reconstrói o menu de instâncias
+    -- (inclui SoD se for o caso) e recarrega listagens no escopo certo
+    -- (ADDON_LOADED pode ter rodado antes de C_Seasons estar pronto).
+    if CEF.rebuildInstanceFilterMenuOpts then
+      CEF.rebuildInstanceFilterMenuOpts()
+    end
+    if CEF.Entries and CEF.Entries.loadFromDB then
+      CEF.Entries.loadFromDB()
+    end
     createMainUI()
     createMinimapButton()
     refreshUI()

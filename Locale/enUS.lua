@@ -10,10 +10,21 @@ CEF.Locale.register("enUS", {
   LOCALE_AUTO_SUMMARY = "|cffffffffAutomatic|r |cffaaaaaa(%s)|r",
 
   -- Tabs / chrome
+  TAB_HOME = "Home",
   TAB_LIST = "Chat",
   TAB_GUILD = "Guild",
   TAB_MESSAGES = "Messages",
   TAB_LFG = "Premade",
+  HOME_SUMMARY_FMT = "Chat %d · Premade %d · Looking for group %d · Recruiting %d",
+  HOME_INSTANCES_TITLE = "Top instances",
+  HOME_INSTANCES_SUB = "Mentions in chat + Premade listings",
+  HOME_ROLES_TITLE = "Roles in demand",
+  HOME_ROLES_SUB = "Chat asks + open Premade slots",
+  HOME_CLASSES_TITLE = "Classes requested",
+  HOME_CLASSES_SUB = "Classes groups are recruiting for (chat + Premade comments)",
+  HOME_EMPTY_INSTANCES = "No instance activity yet.",
+  HOME_EMPTY_ROLES = "No role demand detected yet.",
+  HOME_EMPTY_CLASSES = "No class demand detected yet.",
   LFG_CATEGORY = "Category",
   LFG_REFRESH = "Refresh",
   LFG_SEARCH_PLACEHOLDER = "Search activity or leader…",
@@ -173,6 +184,8 @@ CEF.Locale.register("enUS", {
   GROUP_ERR_FULL = "Group %d is full.",
   GROUP_ERR_NO_PERMISSION = "You must be raid leader or assistant.",
   GROUP_ERR_NOT_LEADER = "Only the group leader can do that.",
+  AFK_TIMER_FMT = "Move: %s",
+  AFK_TIMER_WARN = "Move your character to avoid disconnect (%s left).",
 
   -- Terms page
   TERMS_ABOUT_TITLE = "|cffffcc66About this page|r",

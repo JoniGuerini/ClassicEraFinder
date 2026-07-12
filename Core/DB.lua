@@ -6,12 +6,51 @@ local CEF = ClassicEraFinder
 
 CEF.DB = CEF.DB or {}
 
+-- Era / SoD / Hardcore / Fresh compartilham o cliente _classic_era_ e o mesmo
+-- ClassicEraFinderDB. Oficial é ao vivo (OK); listagens do Chat precisam de
+-- escopo por temporada + realm.
+local function normalizeRealmKey()
+  if GetNormalizedRealmName then
+    local n = GetNormalizedRealmName()
+    if type(n) == "string" and n ~= "" then
+      return strlower(n)
+    end
+  end
+  local r = (GetRealmName and GetRealmName()) or "unknown"
+  r = tostring(r):gsub("%s+", "")
+  return strlower(r)
+end
+
+local function activeSeasonId()
+  if C_Seasons and C_Seasons.GetActiveSeason then
+    local s = C_Seasons.GetActiveSeason()
+    if s ~= nil then
+      return tonumber(s) or 0
+    end
+  end
+  return 0
+end
+
+--- Chave de escopo das listagens Chat (não mistura HC ↔ SoD ↔ Era).
+function CEF.DB.getListingScopeKey()
+  return "s" .. tostring(activeSeasonId()) .. ":r:" .. normalizeRealmKey()
+end
+
+local function migrateFlatEntries(db)
+  if type(db.listingByScope) ~= "table" then
+    db.listingByScope = {}
+  end
+  -- Formato antigo: db.entries = { ... }. Não dá pra saber de qual modo veio;
+  -- descarta pra não contaminar SoD/HC/Era. Mensagens BNet (db.chat) ficam.
+  if type(db.entries) == "table" then
+    db.entries = nil
+  end
+end
+
 function CEF.DB.init()
   _G.ClassicEraFinderDB = _G.ClassicEraFinderDB or {}
   local db = _G.ClassicEraFinderDB
-  if type(db.entries) ~= "table" then
-    db.entries = {}
-  end
+  migrateFlatEntries(db)
   if type(db.chat) ~= "table" then
     db.chat = {}
   end
@@ -29,6 +68,21 @@ function CEF.DB.init()
     db.localeOverride = nil
   end
   db.version = db.version or 1
+  if (tonumber(db.version) or 1) < 2 then
+    db.version = 2
+  end
+end
+
+function CEF.DB.getListingEntries()
+  CEF.DB.init()
+  local db = _G.ClassicEraFinderDB
+  local key = CEF.DB.getListingScopeKey()
+  local bucket = db.listingByScope[key]
+  if type(bucket) ~= "table" then
+    bucket = {}
+    db.listingByScope[key] = bucket
+  end
+  return bucket, key
 end
 
 function CEF.DB.persistChat(conversations)
@@ -80,6 +134,7 @@ function CEF.DB.persistEntries(entries)
   CEF.DB.init()
 
   local db = _G.ClassicEraFinderDB
+  local key = CEF.DB.getListingScopeKey()
   local out = {}
   for i, e in ipairs(entries) do
     local instList = {}
@@ -101,6 +156,5 @@ function CEF.DB.persistEntries(entries)
       channel = tostring(e.channel or ""),
     }
   end
-  db.entries = out
+  db.listingByScope[key] = out
 end
-

@@ -180,21 +180,93 @@ local function canonicalBnetAccountId(accountId)
   return accountId, nil, nil
 end
 
-function Chat.bnetId(accountId, displayName)
-  local canon, resolvedName, battleTag = canonicalBnetAccountId(accountId)
-  if not canon then
+-- Comparação leniente de nomes BNet ("Nome" vs "Nome#1234"): base antes de "#".
+local function sameBnetName(a, b)
+  a = strlower(tostring(a or ""))
+  b = strlower(tostring(b or ""))
+  if a == "" or b == "" then
+    return false
+  end
+  if a == b then
+    return true
+  end
+  a = a:match("^([^#]+)") or a
+  b = b:match("^([^#]+)") or b
+  return a == b
+end
+
+local function friendEntryByTag(battleTag)
+  battleTag = strlower(tostring(battleTag or ""))
+  if battleTag == "" then
     return nil
   end
-  local display = resolvedName or displayName or ("BN#" .. tostring(canon))
-  -- BattleTag é único e estável; IDs numéricos podem colidir entre a lista
-  -- de amigos e os eventos de chat, o que misturava históricos.
-  local key
-  if battleTag then
-    key = "bn:tag:" .. strlower(battleTag)
-  else
-    key = "bn:" .. tostring(canon)
+  local n = (BNGetNumFriends and BNGetNumFriends()) or 0
+  for i = 1, n do
+    local id, accountName, _, _, tag = friendAccountInfo(i)
+    if tag and strlower(tag) == battleTag then
+      return id, accountName, tag
+    end
   end
-  return key, display, canon
+end
+
+local function friendEntryByName(name)
+  name = strlower(tostring(name or ""))
+  if name == "" then
+    return nil
+  end
+  local n = (BNGetNumFriends and BNGetNumFriends()) or 0
+  local fbId, fbName, fbTag
+  for i = 1, n do
+    local id, accountName, _, _, tag = friendAccountInfo(i)
+    local an = strlower(tostring(accountName or ""))
+    if an ~= "" and an == name then
+      return id, accountName, tag
+    end
+    if not fbId and (sameBnetName(accountName, name) or sameBnetName(tag, name)) then
+      fbId, fbName, fbTag = id, accountName, tag
+    end
+  end
+  if fbId then
+    return fbId, fbName, fbTag
+  end
+end
+
+-- Identidade de uma conversa BNet = BattleTag/nome. IDs numéricos NÃO são
+-- estáveis no Classic (mudam entre sessões e vêm trocados nos eventos de
+-- chat), então um ID só é aceite quando o amigo resolvido por ele tem o MESMO
+-- nome recebido; caso contrário a identidade é resolvida pelo nome. Se o nome
+-- não estiver na lista de amigos, a conversa fica isolada numa chave por nome
+-- ("bn:name:") para nunca contaminar o histórico de outro amigo.
+function Chat.bnetId(accountId, displayName)
+  local canon, resolvedName, battleTag = canonicalBnetAccountId(accountId)
+
+  local hasDisplay = type(displayName) == "string" and displayName ~= ""
+  if hasDisplay then
+    local idEntryKnown = (resolvedName ~= nil) or (battleTag ~= nil)
+    local idEntryMatches = idEntryKnown
+      and (sameBnetName(resolvedName, displayName) or sameBnetName(battleTag, displayName))
+    if not idEntryMatches then
+      local nId, nName, nTag = friendEntryByName(displayName)
+      if nId then
+        canon, resolvedName, battleTag = tonumber(nId), nName or displayName, nTag
+      else
+        return "bn:name:" .. strlower(displayName), displayName, nil
+      end
+    end
+  end
+
+  if not canon then
+    if hasDisplay then
+      return "bn:name:" .. strlower(displayName), displayName, nil
+    end
+    return nil
+  end
+
+  local display = resolvedName or displayName or ("BN#" .. tostring(canon))
+  if battleTag then
+    return "bn:tag:" .. strlower(battleTag), display, canon
+  end
+  return "bn:" .. tostring(canon), display, canon
 end
 
 local function ensureConv(id, kind, name, bnetAccountID)
@@ -334,9 +406,17 @@ local function mergeConvInto(target, src)
   target.unread = (target.unread or 0) + (src.unread or 0)
 end
 
--- Normaliza chaves de convs BNet (chave numérica antiga ou tag errada gerada
--- por bug de API) e descarta convs BNet vazias. Roda no load e quando a BNet
--- conecta (dados podem não estar prontos no login).
+-- Normaliza chaves de convs BNet e descarta convs vazias. Roda no load e
+-- quando a BNet conecta (dados podem não estar prontos no login).
+--
+-- Regras de identidade (IDs numéricos mudam entre sessões, NUNCA são
+-- identidade):
+--   1. Conv "bn:tag:X": identidade fixa. Nunca re-chaveia; só atualiza o
+--      bnetAccountID para o ID atual do amigo com esse BattleTag.
+--   2. Conv legada ("bn:<id>" / "bn:name:<nome>"): promove a "bn:tag:" apenas
+--      quando o amigo é encontrado PELO NOME salvo na conversa, ou quando o
+--      amigo resolvido pelo ID tem o mesmo nome (verificação dupla). Sem
+--      confirmação por nome, a conversa fica onde está — nada de merge cego.
 function Chat.migrateBnetKeys()
   local dirty = false
   local moves = nil
@@ -346,35 +426,54 @@ function Chat.migrateBnetKeys()
         -- Convs vazias são recriadas sob demanda; remover limpa chaves ruins.
         moves = moves or {}
         moves[id] = { drop = true }
-      elseif c.bnetAccountID then
-        local newId, _, canon = Chat.bnetId(c.bnetAccountID, c.name)
-        -- Só re-chaveia quando a lista de amigos resolveu um BattleTag de
-        -- verdade; senão mantém a chave atual.
-        if newId and newId:find("^bn:tag:") and newId ~= id then
+      elseif id:find("^bn:tag:") then
+        -- Identidade já é o BattleTag: só sincroniza o ID de envio.
+        local tag = id:match("^bn:tag:(.+)$")
+        local fId, fName = friendEntryByTag(tag)
+        if fId and tonumber(fId) ~= tonumber(c.bnetAccountID) then
+          c.bnetAccountID = tonumber(fId)
+          dirty = true
+        end
+        if fName and fName ~= "" and (not c.name or c.name == "") then
+          c.name = fName
+          dirty = true
+        end
+      else
+        local target
+        local nId, _, nTag = friendEntryByName(c.name)
+        if nTag then
+          target = { newId = "bn:tag:" .. strlower(nTag), canon = tonumber(nId) }
+        elseif c.bnetAccountID then
+          local canon, rName, rTag = canonicalBnetAccountId(c.bnetAccountID)
+          local verified = rTag and (sameBnetName(rName, c.name) or sameBnetName(rTag, c.name))
+          if verified then
+            target = { newId = "bn:tag:" .. strlower(rTag), canon = canon }
+          end
+        end
+        if target and target.newId ~= id then
           moves = moves or {}
-          moves[id] = { newId = newId, canon = canon }
+          moves[id] = target
         end
       end
     end
   end
-  if not moves then
-    return
-  end
-  for oldId, mv in pairs(moves) do
-    local c = conversations[oldId]
-    conversations[oldId] = nil
-    dirty = true
-    if not mv.drop then
-      c.id = mv.newId
-      c.bnetAccountID = mv.canon or c.bnetAccountID
-      local existing = conversations[mv.newId]
-      if existing then
-        mergeConvInto(existing, c)
-      else
-        conversations[mv.newId] = c
-      end
-      if activeConversationId == oldId then
-        activeConversationId = mv.newId
+  if moves then
+    for oldId, mv in pairs(moves) do
+      local c = conversations[oldId]
+      conversations[oldId] = nil
+      dirty = true
+      if not mv.drop then
+        c.id = mv.newId
+        c.bnetAccountID = mv.canon or c.bnetAccountID
+        local existing = conversations[mv.newId]
+        if existing then
+          mergeConvInto(existing, c)
+        else
+          conversations[mv.newId] = c
+        end
+        if activeConversationId == oldId then
+          activeConversationId = mv.newId
+        end
       end
     end
   end
@@ -739,7 +838,7 @@ function Chat.openBnet(accountID, displayName)
   if not id then
     return nil
   end
-  ensureConv(id, "bnet", display, canon or tonumber(accountID))
+  ensureConv(id, "bnet", display, canon)
   Chat.setActiveId(id)
   return id
 end
@@ -824,8 +923,10 @@ function Chat.addOutgoingWhisper(name, text)
 end
 
 function Chat.addIncomingBnet(accountID, displayName, text)
+  -- canon só vem preenchido quando a identidade foi confirmada; nunca gravar
+  -- o ID cru do evento (pode apontar para outro amigo).
   local id, display, canon = Chat.bnetId(accountID, displayName)
-  local conv = ensureConv(id, "bnet", display, canon or tonumber(accountID))
+  local conv = ensureConv(id, "bnet", display, canon)
   if not conv then
     return
   end
@@ -839,7 +940,7 @@ end
 
 function Chat.addOutgoingBnet(accountID, displayName, text)
   local id, display, canon = Chat.bnetId(accountID, displayName)
-  local conv = ensureConv(id, "bnet", display, canon or tonumber(accountID))
+  local conv = ensureConv(id, "bnet", display, canon)
   if not conv then
     return
   end
@@ -878,6 +979,16 @@ function Chat.sendActive(text)
   end
 
   if conv.kind == "bnet" then
+    -- Revalida o ID de envio pela identidade da conversa (tag/nome) na hora:
+    -- IDs numéricos mudam entre sessões e um ID velho enviaria pra outra pessoa.
+    local tag = conv.id and conv.id:match("^bn:tag:(.+)$")
+    if tag then
+      local fId = friendEntryByTag(tag)
+      conv.bnetAccountID = fId and tonumber(fId) or nil
+    elseif conv.id and conv.id:find("^bn:name:") then
+      local nId = friendEntryByName(conv.name)
+      conv.bnetAccountID = nId and tonumber(nId) or nil
+    end
     local aid = tonumber(conv.bnetAccountID)
     if not aid or not BNSendWhisper then
       return failSend()

@@ -36,6 +36,8 @@
 	<Script file="Features/LFG/LFGUI.lua"/>
 	<Script file="Features/Group/Group.lua"/>
 	<Script file="Features/Group/GroupUI.lua"/>
+	<Script file="Features/Home/Home.lua"/>
+	<Script file="Features/Home/HomeUI.lua"/>
 	<!-- UI main + entry -->
 	<Script file="UI/Main.lua"/>
 	<Script file="UI/Minimap.lua"/>

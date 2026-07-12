@@ -44,7 +44,7 @@ function Entries.loadFromDB()
   wipe(indexByKey)
   wipe(filteredView)
 
-  local raw = ClassicEraFinderDB.entries
+  local raw = CEF.DB.getListingEntries and select(1, CEF.DB.getListingEntries()) or nil
   if type(raw) ~= "table" then
     return
   end
@@ -108,6 +108,11 @@ end
 
 function Entries.getFilteredView()
   return filteredView
+end
+
+--- Todas as entries em memória (janela rolling), sem filtro de UI.
+function Entries.getAll()
+  return entries
 end
 
 function Entries.rebuildFilteredView()
