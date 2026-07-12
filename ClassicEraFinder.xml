@@ -1,25 +1,31 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
-	<Script file="ClassicEraFinder.Constants.lua"/>
-	<Script file="ClassicEraFinder.DB.lua"/>
-	<Script file="ClassicEraFinder.Locale.lua"/>
-	<Script file="ClassicEraFinder.Locale_enUS.lua"/>
-	<Script file="ClassicEraFinder.Locale_ptBR.lua"/>
-	<Script file="ClassicEraFinder.Locale_esES.lua"/>
-	<Script file="ClassicEraFinder.InstanceNames.lua"/>
-	<Script file="ClassicEraFinder.ZoneNames.lua"/>
-	<Script file="ClassicEraFinder.Instances.lua"/>
-	<Script file="ClassicEraFinder.Messages.lua"/>
-	<Script file="ClassicEraFinder.Filters.lua"/>
-	<Script file="ClassicEraFinder.Entries.lua"/>
-	<Script file="ClassicEraFinder.UIUtils.lua"/>
-	<Script file="ClassicEraFinder.UILayout.lua"/>
-	<Script file="ClassicEraFinder.UIEngine.lua"/>
-	<Script file="ClassicEraFinder.UIFilters.lua"/>
-	<Script file="ClassicEraFinder.Guild.lua"/>
-	<Script file="ClassicEraFinder.GuildUI.lua"/>
-	<Script file="ClassicEraFinder.Chat.lua"/>
-	<Script file="ClassicEraFinder.ChatUI.lua"/>
-	<Script file="ClassicEraFinder.UI.lua"/>
-	<Script file="ClassicEraFinder.Minimap.lua"/>
+	<!-- Core -->
+	<Script file="Core/Constants.lua"/>
+	<Script file="Core/DB.lua"/>
+	<!-- Locale -->
+	<Script file="Locale/Locale.lua"/>
+	<Script file="Locale/enUS.lua"/>
+	<Script file="Locale/ptBR.lua"/>
+	<Script file="Locale/esES.lua"/>
+	<!-- Data -->
+	<Script file="Data/InstanceNames.lua"/>
+	<Script file="Data/ZoneNames.lua"/>
+	<Script file="Data/Instances.lua"/>
+	<Script file="Data/Messages.lua"/>
+	<Script file="Data/Filters.lua"/>
+	<Script file="Data/Entries.lua"/>
+	<!-- UI helpers -->
+	<Script file="UI/Utils.lua"/>
+	<Script file="UI/Layout.lua"/>
+	<Script file="UI/Engine.lua"/>
+	<Script file="UI/Filters.lua"/>
+	<!-- Features -->
+	<Script file="Features/Guild/Guild.lua"/>
+	<Script file="Features/Guild/GuildUI.lua"/>
+	<Script file="Features/Chat/Chat.lua"/>
+	<Script file="Features/Chat/ChatUI.lua"/>
+	<!-- UI main + entry -->
+	<Script file="UI/Main.lua"/>
+	<Script file="UI/Minimap.lua"/>
 	<Script file="ClassicEraFinder.lua"/>
 </Ui>
