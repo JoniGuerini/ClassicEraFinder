@@ -1064,6 +1064,7 @@ function GUI.createPanels(f, navBar)
       local icon = guildHeader["sortIcon" .. i]
       if h then
         local base = CEF.L[hdrKeys[i]] or labels[i] or ""
+        h:SetFontObject(GameFontNormalSmall)
         h:SetText(base)
         if i == active then
           h:SetTextColor(1, 0.92, 0.45)
@@ -1097,7 +1098,7 @@ function GUI.createPanels(f, navBar)
     h:SetWordWrap(false)
     h:SetText(labels[i])
     h:SetTextColor(1, 0.82, 0.18)
-    btn:SetFontString(h)
+    -- Sem SetFontString: o Button força fonte sem glifos CJK/cirílicos.
     local sortIcon = btn:CreateTexture(nil, "ARTWORK")
     sortIcon:SetSize(SORT_ICON_SIZE, SORT_ICON_SIZE)
     sortIcon:SetTexture(TEX_CHEVRON_DOWN)

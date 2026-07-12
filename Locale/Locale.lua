@@ -1,5 +1,5 @@
 -- Módulo: localização (deteção automática + override manual).
--- Novos idiomas: CEF.Locale.register("xxXX", { KEY = "…" }) num ficheiro Locale_xxXX.lua.
+-- Novos idiomas: CEF.Locale.register("xxXX", { KEY = "…" }) em Locale/xxXX.lua.
 
 ClassicEraFinder = ClassicEraFinder or {}
 local CEF = ClassicEraFinder
@@ -19,13 +19,28 @@ local CLIENT_MAP = {
   ptBR = "ptBR",
   ptPT = "ptBR",
   esES = "esES",
-  esMX = "esES",
+  esMX = "esMX",
+  frFR = "frFR",
+  deDE = "deDE",
+  itIT = "itIT",
+  ruRU = "ruRU",
+  koKR = "koKR",
+  zhCN = "zhCN",
+  zhTW = "zhTW",
 }
 
 local LOCALE_META = {
   enUS = { nativeName = "English", short = "EN" },
   ptBR = { nativeName = "Português", short = "PT" },
-  esES = { nativeName = "Español", short = "ES" },
+  esES = { nativeName = "Español (España)", short = "ES" },
+  esMX = { nativeName = "Español (México)", short = "MX" },
+  frFR = { nativeName = "Français", short = "FR" },
+  deDE = { nativeName = "Deutsch", short = "DE" },
+  itIT = { nativeName = "Italiano", short = "IT" },
+  ruRU = { nativeName = "Русский", short = "RU" },
+  koKR = { nativeName = "한국어", short = "KO" },
+  zhCN = { nativeName = "简体中文", short = "CN" },
+  zhTW = { nativeName = "繁體中文", short = "TW" },
 }
 
 function Loc.register(code, strings)

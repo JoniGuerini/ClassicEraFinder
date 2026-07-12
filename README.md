@@ -8,7 +8,27 @@ Addon para **World of Warcraft Classic Era** que lê o chat (LFG/LFM), organiza 
 - **Guilda** — roster com filtros, ordenação por cabeçalho e cores de nível relativas ao seu personagem
 - **Mensagens** — conversas Battle.net e sussurros no jogo, com histórico local, resposta citada e exclusão confirmada
 - **Termos** — referência das palavras-chave / padrões usados na detecção
-- **Idiomas** — automático pelo cliente, com overrides `enUS`, `ptBR` e `esES`
+- **Idiomas** — automático pelo cliente (`GetLocale`), com override manual na UI
+
+## Idiomas
+
+Packs de UI, nomes de instância e nomes de zona (`AreaTable`):
+
+| Código | Idioma |
+|--------|--------|
+| `enUS` | English (também `enGB`) |
+| `ptBR` | Português (também `ptPT`) |
+| `esES` | Español (España) |
+| `esMX` | Español (México / LATAM) |
+| `frFR` | Français |
+| `deDE` | Deutsch |
+| `itIT` | Italiano |
+| `ruRU` | Русский |
+| `koKR` | 한국어 |
+| `zhCN` | 简体中文 |
+| `zhTW` | 繁體中文 |
+
+**Auto** segue o idioma do jogo. O dropdown de idioma permite forçar um pack. A coluna **Zona** da aba Guilda usa o mesmo idioma selecionado.
 
 ## Instalação
 
@@ -57,7 +77,7 @@ A ordem de carga fica em `ClassicEraFinder.xml`. Os módulos compartilham o glob
 
 1. Edite os `.lua` nas pastas acima
 2. No jogo: `/reload` para aplicar
-3. Branch de modularização: `refactor/modular-structure`
+3. Branch atual: `main` (estrutura modular em `Core/`, `Locale/`, `Data/`, `Features/`, `UI/`)
 
 ## Licença / autor
 

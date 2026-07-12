@@ -1,6 +1,6 @@
 ## Interface: 11508
 ## Title: Classic Era Finder
-## Notes: LFG/LFM from chat — custom UI. Languages: auto + enUS/ptBR (more locales easy to add).
+## Notes: LFG/LFM from chat — custom UI. Languages: auto + enUS/ptBR/esES/esMX/frFR/deDE/itIT/ruRU/koKR/zhCN/zhTW.
 ## Version: 1.0.0
 ## Author: ClassicEraFinder
 ## SavedVariables: ClassicEraFinderDB

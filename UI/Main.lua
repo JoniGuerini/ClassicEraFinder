@@ -1087,19 +1087,38 @@ function CEF.UI.createMainUI()
     bg:SetAllPoints()
     bg:SetColorTexture(0.05, 0.048, 0.06, 0.99)
     local br, bgc, bb, ba = 0.55, 0.45, 0.18, 0.85
-    local function edge(w, h, p1, p2, x, y)
-      local t = localeMenu:CreateTexture(nil, "BORDER")
-      t:SetSize(w, h)
-      t:SetColorTexture(br, bgc, bb, ba)
-      t:SetPoint(p1, localeMenu, p2, x, y)
-    end
-    edge(220, 1, "TOPLEFT", "TOPLEFT", 0, 0)
-    edge(220, 1, "BOTTOMLEFT", "BOTTOMLEFT", 0, 0)
-    edge(1, 1, "TOPLEFT", "TOPLEFT", 0, 0)
+    local top = localeMenu:CreateTexture(nil, "BORDER")
+    top:SetHeight(1)
+    top:SetColorTexture(br, bgc, bb, ba)
+    top:SetPoint("TOPLEFT", localeMenu, "TOPLEFT", 0, 0)
+    top:SetPoint("TOPRIGHT", localeMenu, "TOPRIGHT", 0, 0)
+    local bot = localeMenu:CreateTexture(nil, "BORDER")
+    bot:SetHeight(1)
+    bot:SetColorTexture(br, bgc, bb, ba)
+    bot:SetPoint("BOTTOMLEFT", localeMenu, "BOTTOMLEFT", 0, 0)
+    bot:SetPoint("BOTTOMRIGHT", localeMenu, "BOTTOMRIGHT", 0, 0)
+    local left = localeMenu:CreateTexture(nil, "BORDER")
+    left:SetWidth(1)
+    left:SetColorTexture(br, bgc, bb, ba)
+    left:SetPoint("TOPLEFT", localeMenu, "TOPLEFT", 0, 0)
+    left:SetPoint("BOTTOMLEFT", localeMenu, "BOTTOMLEFT", 0, 0)
+    local right = localeMenu:CreateTexture(nil, "BORDER")
+    right:SetWidth(1)
+    right:SetColorTexture(br, bgc, bb, ba)
+    right:SetPoint("TOPRIGHT", localeMenu, "TOPRIGHT", 0, 0)
+    right:SetPoint("BOTTOMRIGHT", localeMenu, "BOTTOMRIGHT", 0, 0)
   end
   f.filterLocaleMenu = localeMenu
+  local function syncLocaleMenuWidth()
+    local bw = localeDropBtn:GetWidth() or 220
+    if bw < 120 then
+      bw = 220
+    end
+    localeMenu:SetWidth(bw)
+  end
   local localeMenuRows = {}
   local function rebuildLocaleMenu()
+    syncLocaleMenuWidth()
     for _, row in ipairs(localeMenuRows) do
       row:Hide()
     end
@@ -1180,6 +1199,7 @@ function CEF.UI.createMainUI()
     end
     localeLabel:SetWidth(w)
     localeDropBtn:SetWidth(math.min(260, math.max(180, w * 0.45)))
+    syncLocaleMenuWidth()
     stpAboutTitle:SetWidth(w)
     stpAboutBody:SetWidth(w)
     stpInstTitle:SetWidth(w)
