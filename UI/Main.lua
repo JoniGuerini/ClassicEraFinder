@@ -1743,11 +1743,8 @@ function CEF.UI.createMainUI()
   if f.groupInfoBar then
     f.groupInfoBar:SetFrameLevel(240)
   end
-  if f.groupHeader then
-    f.groupHeader:SetFrameLevel(50)
-  end
-  if f.groupScrollFrame then
-    f.groupScrollFrame:SetFrameLevel(50)
+  if f.groupBoard then
+    f.groupBoard:SetFrameLevel(50)
   end
 
   local function syncTableLayout()
@@ -1849,11 +1846,8 @@ function CEF.UI.createMainUI()
     if f.groupInfoBar then
       f.groupInfoBar:SetShown(isGroup)
     end
-    if f.groupHeader then
-      f.groupHeader:SetShown(isGroup)
-    end
-    if f.groupScrollFrame then
-      f.groupScrollFrame:SetShown(isGroup)
+    if f.groupBoard then
+      f.groupBoard:SetShown(isGroup)
     end
 
     settingsTopPanel:SetShown(isSettings)
@@ -1926,9 +1920,6 @@ function CEF.UI.createMainUI()
     end
     if f.cefSyncGuildScroll then
       f.cefSyncGuildScroll()
-    end
-    if f.cefSyncGroupScroll then
-      f.cefSyncGroupScroll()
     end
     if f.cefSyncSettingsScroll then
       f.cefSyncSettingsScroll()

@@ -1,4 +1,5 @@
--- Módulo: UI da aba Grupo (barra de resumo, header e scroll virtualizado).
+-- Módulo: UI da aba Grupo — quadro de blocos por subgrupo (estilo janela de raide da Blizzard).
+-- Cada subgrupo é um bloco com 5 vagas; sem tabela nem scroll.
 
 ClassicEraFinder = ClassicEraFinder or {}
 local CEF = ClassicEraFinder
@@ -7,68 +8,17 @@ CEF.GroupUI = CEF.GroupUI or {}
 local GUI = CEF.GroupUI
 
 local INFO_BAR_H = 30
-local RIGHT_SCROLL_OUTSET = 20
-local COL_COUNT = 7
-
--- Nome | Nível | Classe | Função | Grupo | Zona | Status (última absorve o resto).
-local COL_FRACS = { 0.20, 0.07, 0.08, 0.14, 0.08, 0.24 }
-
-local HDR_KEYS = {
-  "COL_NAME",
-  "COL_LEVEL",
-  "COL_CLASS",
-  "COL_ROLE",
-  "COL_GROUP",
-  "COL_ZONE",
-  "COL_STATUS",
-}
-
-local function columnWidths(totalW)
-  local CC = CEF.CONST
-  local inner = math.max(420, totalW - 2 * CC.TABLE_PAD)
-  local widths, xs = {}, {}
-  local x = CC.TABLE_PAD
-  local used = 0
-  for i = 1, COL_COUNT - 1 do
-    widths[i] = inner * COL_FRACS[i]
-    xs[i] = x
-    x = x + widths[i]
-    used = used + widths[i]
-  end
-  widths[COL_COUNT] = math.max(40, inner - used)
-  xs[COL_COUNT] = x
-  return widths, xs
-end
-
-local function layoutHeaderColumns(header, scrollFrame)
-  if not header then
-    return
-  end
-  local CC = CEF.CONST
-  local w = header:GetWidth()
-  if scrollFrame and scrollFrame.GetWidth then
-    local sw = scrollFrame:GetWidth()
-    if sw and sw > 80 then
-      w = sw
-    end
-  end
-  local widths, xs = columnWidths(w)
-  for i = 1, COL_COUNT do
-    local h = header["h" .. i]
-    if h then
-      h:ClearAllPoints()
-      h:SetPoint("LEFT", header, "LEFT", xs[i], 0)
-      h:SetWidth(math.max(28, widths[i] - CC.COL_GAP))
-      h:SetJustifyH("LEFT")
-    end
-  end
-end
+local SLOTS_PER_GROUP = 5
+local BLOCK_TITLE_H = 20
+local BLOCK_PAD = 4
+local BLOCK_GAP = 8
+local SLOT_GAP = 2
+local MIN_BLOCK_W = 150
+local MAX_COLS = 4
+local PARTY_BLOCK_MAX_W = 340
 
 function GUI.refresh()
-  GUI.layoutRows()
-  if CEF.UI and CEF.UI.mainFrame and CEF.UI.mainFrame.cefSyncGroupScroll then
-    CEF.UI.mainFrame.cefSyncGroupScroll()
-  end
+  GUI.layoutBoard()
   GUI.updateEmptyState()
   GUI.updateInfoBar()
 end
@@ -85,6 +35,20 @@ function GUI.updateInfoBar()
   end
 end
 
+function GUI.updateEmptyState()
+  local ui = CEF.UI or {}
+  local empty = ui.groupEmptyLabel
+  if not empty then
+    return
+  end
+  if not CEF.Group.isInGroup() or #(CEF.Group.getMembers() or {}) == 0 then
+    empty:SetText(CEF.L.GROUP_EMPTY_NOT_IN_GROUP)
+    empty:Show()
+  else
+    empty:Hide()
+  end
+end
+
 -- ===== Feedback de ações (erros de permissão/combate/grupo cheio) =====
 
 local function notifyActionError(errKey, ...)
@@ -97,19 +61,28 @@ local function notifyActionError(errKey, ...)
   end
 end
 
--- ===== Cores base das linhas (usadas por hover/drag para restaurar) =====
+-- ===== Chrome partilhado (fundo escuro + borda dourada) =====
 
-local function applyRowBaseBg(rf)
-  if not rf or not rf.bg then
-    return
+local function makeMenuChrome(frame)
+  local bg = frame:CreateTexture(nil, "BACKGROUND")
+  bg:SetAllPoints()
+  bg:SetColorTexture(0.05, 0.048, 0.06, 0.99)
+  local br, bgc, bb, ba = 0.55, 0.45, 0.18, 0.85
+  local function edge(isH, point1, point2)
+    local t = frame:CreateTexture(nil, "BORDER")
+    if isH then
+      t:SetHeight(1)
+    else
+      t:SetWidth(1)
+    end
+    t:SetColorTexture(br, bgc, bb, ba)
+    t:SetPoint(point1, frame, point1, 0, 0)
+    t:SetPoint(point2, frame, point2, 0, 0)
   end
-  if rf.cefKind == "hdr" then
-    rf.bg:SetColorTexture(0.16, 0.13, 0.08, 0.98)
-  elseif rf.cefEven then
-    rf.bg:SetColorTexture(0.1, 0.1, 0.12, 0.85)
-  else
-    rf.bg:SetColorTexture(0.08, 0.08, 0.1, 0.85)
-  end
+  edge(true, "TOPLEFT", "TOPRIGHT")
+  edge(true, "BOTTOMLEFT", "BOTTOMRIGHT")
+  edge(false, "TOPLEFT", "BOTTOMLEFT")
+  edge(false, "TOPRIGHT", "BOTTOMRIGHT")
 end
 
 -- ===== Menu de contexto (sussurrar, liderança, assistente, remover) =====
@@ -118,28 +91,6 @@ local CTX_W = 190
 local CTX_ROW_H = 22
 local CTX_HEADER_H = 22
 local CTX_PAD = 4
-
-local function makeMenuChrome(menu)
-  local bg = menu:CreateTexture(nil, "BACKGROUND")
-  bg:SetAllPoints()
-  bg:SetColorTexture(0.05, 0.048, 0.06, 0.99)
-  local br, bgc, bb, ba = 0.55, 0.45, 0.18, 0.85
-  local function edge(isH, point1, point2)
-    local t = menu:CreateTexture(nil, "BORDER")
-    if isH then
-      t:SetHeight(1)
-    else
-      t:SetWidth(1)
-    end
-    t:SetColorTexture(br, bgc, bb, ba)
-    t:SetPoint(point1, menu, point1, 0, 0)
-    t:SetPoint(point2, menu, point2, 0, 0)
-  end
-  edge(true, "TOPLEFT", "TOPRIGHT")
-  edge(true, "BOTTOMLEFT", "BOTTOMRIGHT")
-  edge(false, "TOPLEFT", "BOTTOMLEFT")
-  edge(false, "TOPRIGHT", "BOTTOMRIGHT")
-end
 
 function GUI.hideMemberContextMenu()
   local f = CEF.UI and CEF.UI.mainFrame
@@ -363,7 +314,69 @@ function GUI.showMemberContextMenu(member)
   end
 end
 
--- ===== Drag & drop de membros entre subgrupos (só raid, líder/assistente) =====
+-- ===== Vagas: pintura e tooltip =====
+
+local function paintSlotBg(slot)
+  if not slot or not slot.bg then
+    return
+  end
+  if slot.cefMember then
+    slot.bg:SetColorTexture(0.1, 0.1, 0.12, 0.9)
+  else
+    slot.bg:SetColorTexture(0.07, 0.07, 0.085, 0.55)
+  end
+end
+
+local function paintSlot(slot, m, subgroup)
+  slot.cefMember = m
+  slot.cefSubgroup = subgroup
+  if m then
+    slot.nameFs:SetText(CEF.Group.nameRichText(m))
+    slot.nameFs:SetAlpha(m.online and 1 or 0.45)
+    if CEF.Guild and CEF.Guild.levelColorRichText then
+      slot.rightFs:SetText(CEF.Guild.levelColorRichText(m.level))
+    else
+      slot.rightFs:SetText(tostring(m.level or ""))
+    end
+    slot.rightFs:SetAlpha(m.online and 1 or 0.45)
+    -- Ponto de estado: verde vivo, vermelho morto, cinza offline (texto no tooltip).
+    if not m.online then
+      slot.statusDot:SetColorTexture(0.45, 0.45, 0.45, 1)
+    elseif m.isDead then
+      slot.statusDot:SetColorTexture(0.95, 0.25, 0.2, 1)
+    else
+      slot.statusDot:SetColorTexture(0.3, 0.9, 0.3, 1)
+    end
+    slot.statusDot:Show()
+  else
+    slot.nameFs:SetText("|cff4a4a4a—|r")
+    slot.nameFs:SetAlpha(1)
+    slot.rightFs:SetText("")
+    slot.statusDot:Hide()
+  end
+  paintSlotBg(slot)
+end
+
+local function showSlotTooltip(slot)
+  local m = slot.cefMember
+  if not m or not GameTooltip then
+    return
+  end
+  GameTooltip:SetOwner(slot, "ANCHOR_RIGHT")
+  GameTooltip:ClearLines()
+  GameTooltip:AddLine(CEF.Group.nameRichText(m))
+  local className = (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[m.classFile]) or m.classFile or ""
+  GameTooltip:AddLine(CEF.L.COL_LEVEL .. " " .. tostring(m.level or "?") .. "  ·  " .. className, 0.9, 0.9, 0.9)
+  GameTooltip:AddLine(CEF.Group.roleRichText(m))
+  local zone = m.zone or ""
+  if zone ~= "" then
+    GameTooltip:AddLine((CEF.getZoneDisplayName and CEF.getZoneDisplayName(zone)) or zone, 0.7, 0.7, 0.7)
+  end
+  GameTooltip:AddLine(CEF.Group.statusRichText(m))
+  GameTooltip:Show()
+end
+
+-- ===== Drag & drop de membros entre blocos (só raid, líder/assistente) =====
 
 local drag = {
   pending = false, -- botão pressionado, aguardando ultrapassar o limiar
@@ -371,12 +384,11 @@ local drag = {
   memberName = nil,
   startX = 0,
   startY = 0,
-  hoverRf = nil,
+  hoverBlock = nil,
+  hoverSlot = nil,
 }
 
 local DRAG_THRESHOLD = 6
-local EDGE_BAND = 26
-local EDGE_STEP = 7
 
 local function cursorUiXY()
   local scale = UIParent:GetEffectiveScale() or 1
@@ -421,42 +433,45 @@ local function ensureDragGhost()
 end
 
 local function clearDragHover()
-  if drag.hoverRf then
-    applyRowBaseBg(drag.hoverRf)
-    drag.hoverRf = nil
+  if drag.hoverBlock and drag.hoverBlock.dropHl then
+    drag.hoverBlock.dropHl:Hide()
   end
+  if drag.hoverSlot then
+    paintSlotBg(drag.hoverSlot)
+  end
+  drag.hoverBlock = nil
+  drag.hoverSlot = nil
 end
 
--- Linha visível sob o cursor (alvo do drop).
-local function rowUnderCursor()
+-- Bloco (e vaga, se houver) sob o cursor — alvo do drop.
+local function dropTargetUnderCursor()
   local ui = CEF.UI or {}
-  -- Fora da viewport o clipping esconde a linha, mas ela ainda responde ao rato.
-  if not (ui.groupScrollFrame and ui.groupScrollFrame:IsMouseOver()) then
-    return nil
+  local board = ui.groupBoard
+  if not board or not board:IsShown() or not board:IsMouseOver() then
+    return nil, nil
   end
-  local rowFrames = ui.groupRowFrames or {}
-  for _, rf in ipairs(rowFrames) do
-    if rf:IsShown() and rf:IsMouseOver() then
-      return rf
+  for g = 1, 8 do
+    local b = board.blocks and board.blocks[g]
+    if b and b:IsShown() and b:IsMouseOver() then
+      for _, slot in ipairs(b.slots) do
+        if slot:IsMouseOver() then
+          return b, slot
+        end
+      end
+      return b, nil
     end
   end
-  return nil
+  return nil, nil
 end
 
 -- Semântica do drop (igual à janela de raide da Blizzard):
--- alvo com vaga → move; alvo cheio em cima de um membro → troca os dois.
-local function performDrop(targetRf)
+-- grupo com vaga → move; grupo cheio em cima de um membro → troca os dois.
+local function performDrop(block, slotHit)
   local src = findMemberByName(drag.memberName)
-  if not src or not targetRf then
+  if not src or not block or not CEF.Group.isRaid() then
     return
   end
-  local targetSubgroup, targetMember
-  if targetRf.cefKind == "hdr" then
-    targetSubgroup = targetRf.cefSubgroup
-  elseif targetRf.cefKind == "member" and targetRf.cefMember then
-    targetMember = targetRf.cefMember
-    targetSubgroup = targetMember.subgroup
-  end
+  local targetSubgroup = block.cefSubgroup
   if not targetSubgroup or targetSubgroup == src.subgroup then
     return
   end
@@ -465,8 +480,8 @@ local function performDrop(targetRf)
     if not ok and errKey then
       notifyActionError(errKey, targetSubgroup)
     end
-  elseif targetMember then
-    local ok, errKey = CEF.Group.swapMembers(src, targetMember)
+  elseif slotHit and slotHit.cefMember then
+    local ok, errKey = CEF.Group.swapMembers(src, slotHit.cefMember)
     if not ok and errKey then
       notifyActionError(errKey)
     end
@@ -477,7 +492,10 @@ end
 
 local function stopDrag(doDrop)
   local ui = CEF.UI or {}
-  local targetRf = doDrop and drag.active and rowUnderCursor() or nil
+  local targetBlock, targetSlot
+  if doDrop and drag.active then
+    targetBlock, targetSlot = dropTargetUnderCursor()
+  end
   clearDragHover()
   if ui.groupDragGhost then
     ui.groupDragGhost:Hide()
@@ -489,49 +507,20 @@ local function stopDrag(doDrop)
   local wasActive = drag.active
   drag.pending = false
   drag.active = false
-  if wasActive and targetRf then
-    performDrop(targetRf)
+  if wasActive and targetBlock then
+    performDrop(targetBlock, targetSlot)
   end
   drag.memberName = nil
-end
-
--- Auto-scroll quando o cursor encosta nas bordas da lista durante o drag.
-local function dragAutoScroll()
-  local ui = CEF.UI or {}
-  local scroll = ui.groupScrollFrame
-  local child = ui.groupScrollChild
-  if not scroll or not child or not scroll:IsShown() then
-    return
-  end
-  local _, cy = cursorUiXY()
-  local top = scroll:GetTop()
-  local bottom = scroll:GetBottom()
-  if not top or not bottom then
-    return
-  end
-  local vs = scroll:GetVerticalScroll() or 0
-  local maxS = math.max(0, (child:GetHeight() or 0) - (scroll:GetHeight() or 1))
-  local newVs = vs
-  if cy > top - EDGE_BAND and cy < top + EDGE_BAND then
-    newVs = math.max(0, vs - EDGE_STEP)
-  elseif cy < bottom + EDGE_BAND and cy > bottom - EDGE_BAND then
-    newVs = math.min(maxS, vs + EDGE_STEP)
-  end
-  if newVs ~= vs then
-    scroll:SetVerticalScroll(newVs)
-    GUI.layoutRows()
-    -- O re-layout troca o conteúdo das linhas; força recalcular o realce.
-    drag.hoverRf = nil
-    local f = CEF.UI.mainFrame
-    if f and f.cefSyncGroupScroll then
-      f.cefSyncGroupScroll()
-    end
-  end
 end
 
 local function dragOnUpdate()
   if not IsMouseButtonDown("LeftButton") then
     stopDrag(true)
+    return
+  end
+  local ui = CEF.UI or {}
+  if not (ui.groupBoard and ui.groupBoard:IsShown()) then
+    stopDrag(false)
     return
   end
   local x, y = cursorUiXY()
@@ -542,6 +531,9 @@ local function dragOnUpdate()
       return
     end
     drag.active = true
+    if GameTooltip then
+      GameTooltip:Hide()
+    end
     local ghost = ensureDragGhost()
     local m = findMemberByName(drag.memberName)
     ghost.label:SetText(m and CEF.Group.nameRichText(m) or drag.memberName or "")
@@ -553,22 +545,25 @@ local function dragOnUpdate()
   local ghost = ensureDragGhost()
   ghost:ClearAllPoints()
   ghost:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x + 14, y - 10)
-  dragAutoScroll()
-  -- Realce da linha alvo sob o cursor.
-  local rf = rowUnderCursor()
-  if rf ~= drag.hoverRf then
+
+  -- Realce do bloco alvo (e da vaga, no caso de troca com grupo cheio).
+  local block, slot = dropTargetUnderCursor()
+  local src = findMemberByName(drag.memberName)
+  if block ~= drag.hoverBlock or slot ~= drag.hoverSlot then
     clearDragHover()
-    if rf then
-      local src = findMemberByName(drag.memberName)
-      local sameRow = rf.cefKind == "member" and rf.cefMember and src and rf.cefMember.name == src.name
-      if not sameRow then
-        drag.hoverRf = rf
+    if block and src and block.cefSubgroup ~= src.subgroup then
+      drag.hoverBlock = block
+      if slot and slot.cefMember and CEF.Group.subgroupCount(block.cefSubgroup) >= 5 then
+        drag.hoverSlot = slot
       end
     end
   end
-  -- Reaplica a cada frame: um refresh do roster no meio do arrasto reseta o fundo.
-  if drag.hoverRf then
-    drag.hoverRf.bg:SetColorTexture(0.3, 0.24, 0.1, 1)
+  -- Reaplica a cada frame: um refresh do roster no meio do arrasto reseta os fundos.
+  if drag.hoverBlock and drag.hoverBlock.dropHl then
+    drag.hoverBlock.dropHl:Show()
+  end
+  if drag.hoverSlot and drag.hoverSlot.bg then
+    drag.hoverSlot.bg:SetColorTexture(0.38, 0.28, 0.1, 1)
   end
 end
 
@@ -583,36 +578,37 @@ local function startDragTracking(member)
   drag.active = false
   drag.memberName = member.name
   drag.startX, drag.startY = cursorUiXY()
-  drag.hoverRf = nil
+  drag.hoverBlock = nil
+  drag.hoverSlot = nil
   local driver = CEF.UI.groupDragDriver
   driver:Show()
   driver:SetScript("OnUpdate", dragOnUpdate)
 end
 
--- ===== Rato nas linhas: hover, clique direito (menu) e arrasto (esquerdo) =====
+-- ===== Rato nas vagas: hover/tooltip, clique direito (menu) e arrasto (esquerdo) =====
 
-local function bindGroupRowMouse(rf)
-  if rf.cefMouseBound then
-    return
-  end
-  rf.cefMouseBound = true
-  rf:EnableMouse(true)
-  rf:SetScript("OnEnter", function(self)
-    if drag.active or self.cefKind ~= "member" then
+local function bindSlotMouse(slot)
+  slot:EnableMouse(true)
+  slot:SetScript("OnEnter", function(self)
+    if drag.active or not self.cefMember then
       return
     end
     if self.bg then
-      self.bg:SetColorTexture(0.14, 0.12, 0.1, 0.95)
+      self.bg:SetColorTexture(0.15, 0.13, 0.1, 0.95)
     end
+    showSlotTooltip(self)
   end)
-  rf:SetScript("OnLeave", function(self)
+  slot:SetScript("OnLeave", function(self)
+    if GameTooltip then
+      GameTooltip:Hide()
+    end
     if drag.active then
       return
     end
-    applyRowBaseBg(self)
+    paintSlotBg(self)
   end)
-  rf:SetScript("OnMouseDown", function(self, button)
-    if button ~= "LeftButton" or self.cefKind ~= "member" or not self.cefMember then
+  slot:SetScript("OnMouseDown", function(self, button)
+    if button ~= "LeftButton" or not self.cefMember then
       return
     end
     if not (CEF.Group.canEditRaid and CEF.Group.canEditRaid()) then
@@ -620,7 +616,7 @@ local function bindGroupRowMouse(rf)
     end
     startDragTracking(self.cefMember)
   end)
-  rf:SetScript("OnMouseUp", function(self, button)
+  slot:SetScript("OnMouseUp", function(self, button)
     if button ~= "RightButton" then
       return
     end
@@ -628,191 +624,213 @@ local function bindGroupRowMouse(rf)
       stopDrag(false)
       return
     end
-    if self.cefKind == "member" and self.cefMember then
+    if self.cefMember then
       GUI.showMemberContextMenu(self.cefMember)
     end
   end)
 end
 
-function GUI.updateEmptyState()
-  local ui = CEF.UI or {}
-  local empty = ui.groupEmptyLabel
-  if not empty then
+-- ===== Blocos de subgrupo =====
+
+local function makeSlot(block)
+  local slot = CreateFrame("Frame", nil, block)
+  slot:SetHeight(20)
+  local bg = slot:CreateTexture(nil, "BACKGROUND")
+  bg:SetAllPoints()
+  slot.bg = bg
+  local dot = slot:CreateTexture(nil, "OVERLAY")
+  dot:SetSize(7, 7)
+  dot:SetPoint("RIGHT", slot, "RIGHT", -6, 0)
+  dot:Hide()
+  slot.statusDot = dot
+  local rightFs = slot:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  rightFs:SetPoint("RIGHT", slot, "RIGHT", -18, 0)
+  rightFs:SetJustifyH("RIGHT")
+  rightFs:SetWordWrap(false)
+  slot.rightFs = rightFs
+  local nameFs = slot:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  nameFs:SetPoint("LEFT", slot, "LEFT", 6, 0)
+  nameFs:SetPoint("RIGHT", slot, "RIGHT", -44, 0)
+  nameFs:SetJustifyH("LEFT")
+  nameFs:SetWordWrap(false)
+  slot.nameFs = nameFs
+  bindSlotMouse(slot)
+  return slot
+end
+
+local function ensureBlocks(board)
+  if board.blocks then
     return
   end
-  if not CEF.Group.isInGroup() or #(CEF.Group.getMembers() or {}) == 0 then
-    empty:SetText(CEF.L.GROUP_EMPTY_NOT_IN_GROUP)
-    empty:Show()
+  board.blocks = {}
+  for g = 1, 8 do
+    local b = CreateFrame("Frame", nil, board)
+    b.cefSubgroup = g
+    makeMenuChrome(b)
+
+    local titleBg = b:CreateTexture(nil, "BORDER")
+    titleBg:SetPoint("TOPLEFT", b, "TOPLEFT", 1, -1)
+    titleBg:SetPoint("TOPRIGHT", b, "TOPRIGHT", -1, -1)
+    titleBg:SetHeight(BLOCK_TITLE_H)
+    titleBg:SetColorTexture(0.14, 0.12, 0.08, 1)
+
+    local titleFs = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    titleFs:SetPoint("TOPLEFT", b, "TOPLEFT", 7, -1)
+    titleFs:SetHeight(BLOCK_TITLE_H)
+    titleFs:SetJustifyH("LEFT")
+    titleFs:SetJustifyV("MIDDLE")
+    b.titleFs = titleFs
+
+    local countFs = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    countFs:SetPoint("TOPRIGHT", b, "TOPRIGHT", -7, -1)
+    countFs:SetHeight(BLOCK_TITLE_H)
+    countFs:SetJustifyH("RIGHT")
+    countFs:SetJustifyV("MIDDLE")
+    b.countFs = countFs
+
+    -- Realce de alvo durante o drag (véu âmbar acima das vagas; não captura o rato).
+    local hlFrame = CreateFrame("Frame", nil, b)
+    hlFrame:SetAllPoints()
+    hlFrame:SetFrameLevel((b:GetFrameLevel() or 0) + 10)
+    hlFrame:EnableMouse(false)
+    local hlTex = hlFrame:CreateTexture(nil, "OVERLAY")
+    hlTex:SetAllPoints()
+    hlTex:SetColorTexture(1, 0.82, 0.2, 0.1)
+    hlFrame:Hide()
+    b.dropHl = hlFrame
+
+    b.slots = {}
+    for s = 1, SLOTS_PER_GROUP do
+      b.slots[s] = makeSlot(b)
+    end
+    b:Hide()
+    board.blocks[g] = b
+  end
+end
+
+-- Membros agrupados por subgrupo (party → tudo no bucket 1), líder/assist primeiro.
+local function membersBySubgroup()
+  local buckets = {}
+  for g = 1, 8 do
+    buckets[g] = {}
+  end
+  local isRaid = CEF.Group.isRaid()
+  for _, m in ipairs(CEF.Group.getMembers() or {}) do
+    local g = 1
+    if isRaid then
+      g = math.max(1, math.min(8, tonumber(m.subgroup) or 1))
+    end
+    local bucket = buckets[g]
+    bucket[#bucket + 1] = m
+  end
+  for g = 1, 8 do
+    table.sort(buckets[g], function(a, b)
+      if a.isLeader ~= b.isLeader then
+        return a.isLeader
+      end
+      if a.isAssist ~= b.isAssist then
+        return a.isAssist
+      end
+      return strlower(a.nameShort or "") < strlower(b.nameShort or "")
+    end)
+  end
+  return buckets
+end
+
+function GUI.layoutBoard()
+  local ui = CEF.UI or {}
+  local board = ui.groupBoard
+  if not board or not board.blocks then
+    return
+  end
+  local w = board:GetWidth() or 0
+  local h = board:GetHeight() or 0
+  if w < 60 or h < 40 then
+    return
+  end
+
+  local inGroup = CEF.Group.isInGroup() and #(CEF.Group.getMembers() or {}) > 0
+  if not inGroup then
+    for g = 1, 8 do
+      board.blocks[g]:Hide()
+    end
+    return
+  end
+
+  local isRaid = CEF.Group.isRaid()
+  local blocksN = isRaid and 8 or 1
+  local buckets = membersBySubgroup()
+
+  local cols, rows
+  if blocksN == 1 then
+    cols, rows = 1, 1
   else
-    empty:Hide()
-  end
-end
-
-function GUI.layoutRows()
-  local ui = CEF.UI or {}
-  local scrollChild = ui.groupScrollChild
-  local scrollFrame = ui.groupScrollFrame
-  local rowFrames = ui.groupRowFrames
-  local CC = CEF.CONST
-  if not scrollChild or not scrollFrame or not rowFrames then
-    return
-  end
-
-  local viewH = scrollFrame:GetHeight() or 0
-  local childW = scrollChild:GetWidth() or 0
-  if viewH < 8 or childW < 32 then
-    return
-  end
-
-  local list = CEF.Group.getDisplayList()
-  local n = #list
-  local rowH = CC.ROW_HEIGHT
-  local totalH = math.max(n * rowH, 1)
-  scrollChild:SetHeight(totalH)
-
-  local maxScroll = math.max(0, totalH - viewH)
-  local vs = scrollFrame:GetVerticalScroll() or 0
-  if vs > maxScroll then
-    vs = maxScroll
-    scrollFrame:SetVerticalScroll(maxScroll)
-  elseif vs < 0 then
-    vs = 0
-    scrollFrame:SetVerticalScroll(0)
-  end
-
-  local first = 1
-  if n > 0 and rowH > 0 then
-    first = math.floor(vs / rowH) + 1
-    if first < 1 then
-      first = 1
-    end
-    if first > n then
-      first = n
+    local colsByWidth = math.max(1, math.floor((w + BLOCK_GAP) / (MIN_BLOCK_W + BLOCK_GAP)))
+    cols = math.min(MAX_COLS, colsByWidth)
+    rows = math.ceil(blocksN / cols)
+    -- Janela baixa: mais colunas (blocos mais estreitos) para não estourar na vertical.
+    local minBlockH = BLOCK_TITLE_H + 2 * BLOCK_PAD + SLOTS_PER_GROUP * 14 + (SLOTS_PER_GROUP - 1) * SLOT_GAP
+    local maxRows = math.max(1, math.floor((h + BLOCK_GAP) / (minBlockH + BLOCK_GAP)))
+    if rows > maxRows then
+      cols = math.max(cols, math.min(colsByWidth, math.ceil(blocksN / maxRows)))
+      rows = math.ceil(blocksN / cols)
     end
   end
-  local visible = math.ceil(viewH / rowH) + 2
-  local last = math.min(n, first + visible - 1)
-  if n == 0 then
-    first, last = 1, 0
+
+  local blockW = (w - (cols - 1) * BLOCK_GAP) / cols
+  if blocksN == 1 then
+    blockW = math.min(blockW, PARTY_BLOCK_MAX_W)
+  end
+  -- Altura da vaga adapta-se ao espaço; o bloco encolhe/estica com a janela.
+  local blockHAvail = (h - (rows - 1) * BLOCK_GAP) / rows
+  local slotH = (blockHAvail - BLOCK_TITLE_H - 2 * BLOCK_PAD - (SLOTS_PER_GROUP - 1) * SLOT_GAP) / SLOTS_PER_GROUP
+  slotH = math.max(14, math.min(26, math.floor(slotH)))
+  local blockH = BLOCK_TITLE_H + 2 * BLOCK_PAD + SLOTS_PER_GROUP * slotH + (SLOTS_PER_GROUP - 1) * SLOT_GAP
+
+  local xOff = 0
+  if blocksN == 1 then
+    xOff = math.max(0, (w - blockW) / 2)
   end
 
-  for _, rf in ipairs(rowFrames) do
-    rf:Hide()
-  end
-
-  local w = childW
-  if scrollFrame.GetWidth then
-    local sw = scrollFrame:GetWidth() or 0
-    if sw > w then
-      w = sw
-    end
-  end
-  local widths, xs = columnWidths(w)
-  local iconSize = math.min(18, math.max(14, rowH - 4))
-
-  for i = first, last do
-    local rowIndex = i - first + 1
-    if rowIndex > CC.MAX_ROW_FRAMES_POOL then
-      break
-    end
-    local rf = rowFrames[rowIndex]
-    if not rf then
-      rf = CreateFrame("Frame", nil, scrollChild)
-      rf:SetHeight(rowH)
-      local bg = rf:CreateTexture(nil, "BACKGROUND")
-      bg:SetAllPoints()
-      bg:SetColorTexture(0.08, 0.08, 0.1, 0.85)
-      rf.bg = bg
-      rf.cols = {}
-      for c = 1, COL_COUNT do
-        rf.cols[c] = rf:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-      end
-      rf.classIcon = rf:CreateTexture(nil, "OVERLAY")
-      rf.classIcon:SetSize(iconSize, iconSize)
-      local sep = rf:CreateTexture(nil, "ARTWORK")
-      sep:SetHeight(1)
-      sep:SetColorTexture(0, 0, 0, 0.22)
-      sep:SetPoint("BOTTOMLEFT", rf, "BOTTOMLEFT", 4, 0)
-      sep:SetPoint("BOTTOMRIGHT", rf, "BOTTOMRIGHT", -4, 0)
-      rf.rowBotSep = sep
-      bindGroupRowMouse(rf)
-      rowFrames[rowIndex] = rf
-    end
-
-    local item = list[i]
-    rf:ClearAllPoints()
-    rf:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, -((i - 1) * rowH))
-    rf:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", 0, -((i - 1) * rowH))
-    rf:SetHeight(rowH)
-    rf:Show()
-
-    for c = 1, COL_COUNT do
-      local fs = rf.cols[c]
-      fs:ClearAllPoints()
-      fs:SetPoint("LEFT", rf, "LEFT", xs[c], 0)
-      fs:SetWidth(math.max(24, widths[c] - CC.COL_GAP))
-      fs:SetJustifyH("LEFT")
-      fs:SetJustifyV("MIDDLE")
-      fs:SetHeight(rowH)
-      fs:SetText("")
-      fs:Show()
-    end
-
-    if item.kind == "hdr" then
-      -- Cabeçalho de subgrupo (raide): faixa própria, sem colunas.
-      rf.cefKind = "hdr"
-      rf.cefSubgroup = item.subgroup
-      rf.cefMember = nil
-      rf.cefEven = false
-      applyRowBaseBg(rf)
-      rf.cols[1]:ClearAllPoints()
-      rf.cols[1]:SetPoint("LEFT", rf, "LEFT", xs[1], 0)
-      rf.cols[1]:SetWidth(math.max(120, (widths[1] or 120) + (widths[2] or 0)))
-      rf.cols[1]:SetText("|cffffcc66" .. CEF.L("GROUP_SUBGROUP_FMT", item.subgroup) .. "|r")
-      rf.classIcon:Hide()
+  for g = 1, 8 do
+    local b = board.blocks[g]
+    if g > blocksN then
+      b:Hide()
     else
-      local m = item.member
-      rf.cefKind = "member"
-      rf.cefSubgroup = m.subgroup
-      rf.cefMember = m
-      rf.cefEven = ((i % 2) == 0)
-      applyRowBaseBg(rf)
+      local col = (g - 1) % cols
+      local row = math.floor((g - 1) / cols)
+      b:ClearAllPoints()
+      b:SetPoint("TOPLEFT", board, "TOPLEFT", xOff + col * (blockW + BLOCK_GAP), -(row * (blockH + BLOCK_GAP)))
+      b:SetSize(blockW, blockH)
 
-      rf.cols[1]:SetText(CEF.Group.nameRichText(m))
-      if CEF.Guild and CEF.Guild.levelColorRichText then
-        rf.cols[2]:SetText(CEF.Guild.levelColorRichText(m.level))
+      if isRaid then
+        b.titleFs:SetText("|cffffcc66" .. CEF.L("GROUP_SUBGROUP_FMT", g) .. "|r")
       else
-        rf.cols[2]:SetText(tostring(m.level or ""))
+        b.titleFs:SetText("|cffffcc66" .. CEF.L.GROUP_TYPE_PARTY .. "|r")
       end
-      rf.classIcon:ClearAllPoints()
-      rf.classIcon:SetSize(iconSize, iconSize)
-      rf.classIcon:SetPoint("LEFT", rf, "LEFT", xs[3] + 2, 0)
-      if CEF.Guild and CEF.Guild.setClassIconTexture then
-        CEF.Guild.setClassIconTexture(rf.classIcon, m.classFile)
+      local list = buckets[g]
+      b.countFs:SetText("|cff777777" .. #list .. "/" .. SLOTS_PER_GROUP .. "|r")
+
+      for s = 1, SLOTS_PER_GROUP do
+        local slot = b.slots[s]
+        local yTop = BLOCK_TITLE_H + BLOCK_PAD + (s - 1) * (slotH + SLOT_GAP)
+        slot:ClearAllPoints()
+        slot:SetPoint("TOPLEFT", b, "TOPLEFT", BLOCK_PAD + 1, -yTop)
+        slot:SetPoint("TOPRIGHT", b, "TOPRIGHT", -(BLOCK_PAD + 1), -yTop)
+        slot:SetHeight(slotH)
+        paintSlot(slot, list[s], g)
       end
-      rf.cols[4]:SetText(CEF.Group.roleRichText(m))
-      if CEF.Group.isRaid() then
-        rf.cols[5]:SetText(tostring(m.subgroup or 1))
-      else
-        rf.cols[5]:SetText("|cff888888—|r")
-      end
-      local zone = m.zone or ""
-      if zone ~= "" then
-        rf.cols[6]:SetText((CEF.getZoneDisplayName and CEF.getZoneDisplayName(zone)) or zone)
-      else
-        rf.cols[6]:SetText("|cff888888—|r")
-      end
-      rf.cols[7]:SetText(CEF.Group.statusRichText(m))
+      b:Show()
     end
   end
 end
+
+-- ===== Criação dos painéis =====
 
 function GUI.createPanels(f, navBar)
-  local CC = CEF.CONST
   CEF.UI = CEF.UI or {}
-  CEF.UI.groupRowFrames = CEF.UI.groupRowFrames or {}
 
-  -- Barra de resumo (tipo · membros · líder).
+  -- Barra de resumo (tipo · membros · líder · dica de edição).
   local infoBar = CreateFrame("Frame", nil, f)
   infoBar:SetHeight(INFO_BAR_H)
   infoBar:SetPoint("TOPLEFT", navBar, "BOTTOMLEFT", 0, -4)
@@ -829,186 +847,25 @@ function GUI.createPanels(f, navBar)
   infoLabel:SetJustifyH("LEFT")
   infoLabel:SetText("")
 
-  -- Header das colunas (estático, sem ordenação).
-  local header = CreateFrame("Frame", nil, f)
-  header:SetHeight(20)
-  header:SetPoint("TOPLEFT", infoBar, "BOTTOMLEFT", 0, -4)
-  header:SetPoint("TOPRIGHT", infoBar, "BOTTOMRIGHT", 0, -4)
-  header:Hide()
-  local hTex = header:CreateTexture(nil, "BACKGROUND")
-  hTex:SetAllPoints()
-  hTex:SetColorTexture(0.2, 0.18, 0.12, 0.95)
-  for i = 1, COL_COUNT do
-    local h = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    h:SetJustifyH("LEFT")
-    h:SetJustifyV("MIDDLE")
-    h:SetWordWrap(false)
-    h:SetHeight(20)
-    h:SetText(CEF.L[HDR_KEYS[i]])
-    h:SetTextColor(1, 0.82, 0.18)
-    header["h" .. i] = h
-  end
+  -- Quadro com os blocos de subgrupo (sem scroll: tudo visível de uma vez).
+  local board = CreateFrame("Frame", nil, f)
+  board:SetPoint("TOPLEFT", infoBar, "BOTTOMLEFT", 0, -8)
+  board:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -8, 8)
+  board:EnableMouse(false)
+  board:Hide()
+  ensureBlocks(board)
 
-  local scroll = CreateFrame("ScrollFrame", nil, f)
-  scroll:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -4)
-  scroll:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -RIGHT_SCROLL_OUTSET, 6)
-  scroll:EnableMouse(true)
-  scroll:Hide()
-
-  local child = CreateFrame("Frame", nil, scroll)
-  child:SetWidth(scroll:GetWidth())
-  child:SetHeight(400)
-  scroll:SetScrollChild(child)
-
-  local emptyLabel = scroll:CreateFontString(nil, "OVERLAY", "GameFontDisable")
-  emptyLabel:SetPoint("CENTER", scroll, "CENTER", 0, 0)
+  local emptyLabel = board:CreateFontString(nil, "OVERLAY", "GameFontDisable")
+  emptyLabel:SetPoint("CENTER", board, "CENTER", 0, 0)
   emptyLabel:SetText("")
   emptyLabel:Hide()
 
   CEF.UI.groupInfoBar = infoBar
   CEF.UI.groupInfoLabel = infoLabel
-  CEF.UI.groupHeader = header
-  CEF.UI.groupScrollFrame = scroll
-  CEF.UI.groupScrollChild = child
+  CEF.UI.groupBoard = board
   CEF.UI.groupEmptyLabel = emptyLabel
   f.groupInfoBar = infoBar
-  f.groupHeader = header
-  f.groupScrollFrame = scroll
-
-  local function onGroupWheel(_, delta)
-    local n = #(CEF.Group.getDisplayList() or {})
-    local totalH = math.max(1, n * CC.ROW_HEIGHT)
-    local viewH = scroll:GetHeight() or CC.ROW_HEIGHT
-    local maxScroll = math.max(0, totalH - viewH)
-    local step = viewH * 0.75
-    local vs = scroll:GetVerticalScroll()
-    if delta > 0 then
-      vs = math.max(0, vs - step)
-    else
-      vs = math.min(maxScroll, vs + step)
-    end
-    scroll:SetVerticalScroll(vs)
-    GUI.refresh()
-  end
-  scroll:EnableMouseWheel(true)
-  scroll:SetScript("OnMouseWheel", onGroupWheel)
-
-  -- Scrollbar custom, mesmo padrão da aba Guilda.
-  local sbar = CreateFrame("Frame", nil, f)
-  sbar:SetWidth(12)
-  sbar:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 2, 0)
-  sbar:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", 2, 0)
-  sbar:EnableMouse(true)
-  sbar:SetFrameLevel((scroll:GetFrameLevel() or 0) + 8)
-  sbar:Hide()
-  local track = sbar:CreateTexture(nil, "BACKGROUND")
-  track:SetAllPoints()
-  track:SetColorTexture(0.04, 0.035, 0.07, 0.96)
-  local thumb = CreateFrame("Button", nil, sbar)
-  thumb:SetWidth(10)
-  thumb:SetHeight(32)
-  thumb:SetFrameLevel((sbar:GetFrameLevel() or 0) + 3)
-  local thumbTex = thumb:CreateTexture(nil, "ARTWORK")
-  thumbTex:SetAllPoints()
-  thumbTex:SetColorTexture(0.52, 0.5, 0.6, 0.88)
-  thumb:SetNormalTexture(thumbTex)
-  local thumbHi = thumb:CreateTexture(nil, "HIGHLIGHT")
-  thumbHi:SetAllPoints()
-  thumbHi:SetColorTexture(0.62, 0.58, 0.72, 0.55)
-  thumb:SetHighlightTexture(thumbHi)
-  thumb:RegisterForClicks("LeftButtonUp", "LeftButtonDown")
-
-  local function syncGroupScroll()
-    if not scroll:IsShown() then
-      sbar:Hide()
-      thumb:Hide()
-      return
-    end
-    local ch = child:GetHeight() or 0
-    local sh = scroll:GetHeight() or 1
-    local maxV = math.max(0, ch - sh)
-    local cur = scroll:GetVerticalScroll() or 0
-    if cur > maxV then
-      cur = maxV
-      scroll:SetVerticalScroll(cur)
-    end
-    if maxV > 0.5 then
-      sbar:Show()
-      local trackH = sbar:GetHeight() or 1
-      local thumbH = math.min(trackH, math.max(24, math.floor(trackH * sh / math.max(ch, 1))))
-      if thumbH > trackH then
-        thumbH = trackH
-      end
-      thumb:SetHeight(thumbH)
-      local range = math.max(1e-6, trackH - thumbH)
-      local yFromTop = (maxV > 0) and ((cur / maxV) * range) or 0
-      thumb:ClearAllPoints()
-      local lx = math.max(0, (sbar:GetWidth() - thumb:GetWidth()) / 2)
-      thumb:SetPoint("TOPLEFT", sbar, "TOPLEFT", lx, -yFromTop)
-      thumb:Show()
-    else
-      sbar:Hide()
-      thumb:Hide()
-    end
-  end
-  f.cefSyncGroupScroll = syncGroupScroll
-  scroll:SetScript("OnVerticalScroll", syncGroupScroll)
-  sbar:EnableMouseWheel(true)
-  sbar:SetScript("OnMouseWheel", onGroupWheel)
-
-  thumb:SetScript("OnMouseDown", function(self, button)
-    if button ~= "LeftButton" then
-      return
-    end
-    self.cefDragging = true
-    local _, ny = GetCursorPosition()
-    self.cefLastCursorY = ny
-    self:SetScript("OnUpdate", function(btn)
-      if not btn.cefDragging then
-        return
-      end
-      if not IsMouseButtonDown("LeftButton") then
-        btn.cefDragging = false
-        btn:SetScript("OnUpdate", nil)
-        return
-      end
-      local _, cy = GetCursorPosition()
-      local scale = sbar:GetEffectiveScale() or 1
-      if scale < 0.01 then
-        scale = 1
-      end
-      local deltaPx = (btn.cefLastCursorY - cy) / scale
-      btn.cefLastCursorY = cy
-      local ch = child:GetHeight() or 0
-      local sh = scroll:GetHeight() or 1
-      local maxS = math.max(0, ch - sh)
-      local trackH = sbar:GetHeight() or 1
-      local thumbH = btn:GetHeight() or 24
-      local range = math.max(1e-6, trackH - thumbH)
-      local scrollDelta = (deltaPx / range) * maxS
-      local v = (scroll:GetVerticalScroll() or 0) + scrollDelta
-      if v < 0 then
-        v = 0
-      end
-      if v > maxS then
-        v = maxS
-      end
-      scroll:SetVerticalScroll(v)
-      GUI.refresh()
-    end)
-  end)
-
-  thumb:SetScript("OnMouseUp", function(self)
-    self.cefDragging = false
-    self:SetScript("OnUpdate", nil)
-  end)
-
-  scroll:SetScript("OnShow", function()
-    scroll:SetScript("OnUpdate", function(self)
-      self:SetScript("OnUpdate", nil)
-      syncGroupScroll()
-    end)
-  end)
+  f.groupBoard = board
 
   -- Reagenda o layout no próximo frame (tamanho só estabiliza depois do resize).
   local layoutBoot = CreateFrame("Frame", nil, f)
@@ -1026,45 +883,31 @@ function GUI.createPanels(f, navBar)
   f.cefScheduleGroupLayoutSync = scheduleGroupLayoutSync
 
   f.cefSyncGroupLayout = function()
-    if not scroll or not child then
-      return
-    end
-    local sw = scroll:GetWidth() or 0
-    local sh = scroll:GetHeight() or 0
-    if sw < 32 or sh < 8 then
+    local bw = board:GetWidth() or 0
+    local bh = board:GetHeight() or 0
+    if bw < 60 or bh < 40 then
       scheduleGroupLayoutSync()
       return
     end
-    child:SetWidth(sw)
-    -- Rebind evita ScrollFrame Classic "perder" o conteúdo após resize do parent.
-    scroll:SetScrollChild(child)
-    layoutHeaderColumns(header, scroll)
     GUI.refresh()
-    if f.cefSyncGroupScroll then
-      f.cefSyncGroupScroll()
-    end
   end
 
-  scroll:SetScript("OnSizeChanged", function()
+  board:SetScript("OnSizeChanged", function()
     if f.cefNavTab == "group" then
       scheduleGroupLayoutSync()
     end
   end)
 
+  board:SetScript("OnShow", function()
+    scheduleGroupLayoutSync()
+  end)
+
   f.cefApplyGroupLocale = function()
-    for i = 1, COL_COUNT do
-      local h = header["h" .. i]
-      if h then
-        h:SetText(CEF.L[HDR_KEYS[i]])
-      end
-    end
-    layoutHeaderColumns(header, scroll)
     GUI.refresh()
   end
 
   return {
     infoBar = infoBar,
-    header = header,
-    scroll = scroll,
+    board = board,
   }
 end
