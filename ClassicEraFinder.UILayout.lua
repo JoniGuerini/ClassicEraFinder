@@ -15,12 +15,13 @@ function UI.columnWidths(totalW)
   local innerTotal = math.max(280 + CC.INSTANCE_LEVELS_TO_MSG_GAP, totalW - 2 * CC.TABLE_PAD)
   local inner = innerTotal - CC.INSTANCE_LEVELS_TO_MSG_GAP
   -- Coluna 1 = nome da instância + níveis na mesma linha; c2 fica 0 (compat.).
-  local c1 = inner * 0.21
+  -- Ação fica enxuta (só cabe o botão); o espaço sobra para instância/níveis.
+  local c1 = inner * 0.29
   local c2 = 0
   local c3 = inner * 0.31
   local c4 = inner * 0.17
   local c5 = inner * 0.12
-  local c6 = inner * 0.19
+  local c6 = inner * 0.11
   local x1 = CC.TABLE_PAD
   local x3 = x1 + c1 + CC.INSTANCE_LEVELS_TO_MSG_GAP
   local x4 = x3 + c3
@@ -102,4 +103,92 @@ function UI.layoutHeaderColumns(header)
   header.h6:SetWidth(w6)
   header.h5:SetJustifyH("LEFT")
   header.h6:SetJustifyH("LEFT")
+end
+
+-- Colunas Guilda: Nome | Nível | Classe | Rank | Zona | Status | Nota | [Nota oficial]
+function UI.guildColumnWidths(totalW, showOfficerNote)
+  local CC = cfg()
+  local inner = math.max(400, totalW - 2 * CC.TABLE_PAD)
+  local fracs
+  if showOfficerNote then
+    fracs = { 0.14, 0.06, 0.10, 0.12, 0.14, 0.12, 0.16, 0.16 }
+  else
+    -- Sem nota oficial: reparte o espaço pelas colunas úteis (sem “buraco” à direita).
+    fracs = { 0.18, 0.06, 0.10, 0.13, 0.18, 0.13, 0.22 }
+  end
+  local n = #fracs
+  local widths = {}
+  local xs = {}
+  local x = CC.TABLE_PAD
+  local used = 0
+  for i = 1, n - 1 do
+    widths[i] = inner * fracs[i]
+    xs[i] = x
+    x = x + widths[i]
+    used = used + widths[i]
+  end
+  -- Última coluna visível absorve o resto → preenche até à borda.
+  widths[n] = math.max(40, inner - used)
+  xs[n] = x
+  local endX = x + widths[n]
+  for i = n + 1, 8 do
+    widths[i] = 0
+    xs[i] = endX
+  end
+  return widths, xs, n
+end
+
+function UI.layoutGuildHeaderColumns(header, scrollFrame)
+  if not header then
+    return
+  end
+  local CC = cfg()
+  local w = header:GetWidth()
+  if scrollFrame and scrollFrame.GetWidth then
+    local sw = scrollFrame:GetWidth()
+    if sw and sw > 80 then
+      w = sw
+    end
+  end
+  local showOfficer = CEF.Guild and CEF.Guild.canViewOfficerNote and CEF.Guild.canViewOfficerNote()
+  local widths, xs, colCount = UI.guildColumnWidths(w, showOfficer)
+  for i = 1, 8 do
+    local btn = header["btn" .. i]
+    local h = header["h" .. i]
+    local target = btn or h
+    if target then
+      if i <= colCount then
+        target:ClearAllPoints()
+        target:SetPoint("LEFT", header, "LEFT", xs[i], 0)
+        target:SetWidth(math.max(28, widths[i] - CC.COL_GAP))
+        if btn then
+          target:SetHeight(header:GetHeight() or 20)
+          if h then
+            h:ClearAllPoints()
+            h:SetPoint("LEFT", btn, "LEFT", 0, 0)
+            h:SetPoint("RIGHT", btn, "RIGHT", -13, 0)
+            h:SetJustifyH("LEFT")
+            h:SetJustifyV("MIDDLE")
+            h:Show()
+          end
+          btn:Show()
+        else
+          target:SetJustifyH("LEFT")
+        end
+        target:Show()
+      else
+        target:Hide()
+        if h and btn then
+          h:Hide()
+        end
+        local icon = header["sortIcon" .. i]
+        if icon then
+          icon:Hide()
+        end
+      end
+    end
+  end
+  if header.updateSortLabels then
+    header.updateSortLabels()
+  end
 end

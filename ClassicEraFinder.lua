@@ -1,6 +1,6 @@
 --[[
   Classic Era Finder — entrypoint: eventos, comandos e sincronização mínima com a UI.
-  Lógica de dados → ClassicEraFinder.Entries / DB / Filters / Messages / Instances
+  Lógica de dados → ClassicEraFinder.Entries / DB / Filters / Messages / Instances / Guild
   Construção da janela → ClassicEraFinder.UI
 ]]
 
@@ -11,9 +11,19 @@ local ADDON_NAME = "ClassicEraFinder"
 
 CEF.state = CEF.state or {}
 CEF.state.filterSearchText = CEF.state.filterSearchText or ""
-CEF.state.filterInstanceKey = CEF.state.filterInstanceKey or false
-CEF.state.filterIntentKey = CEF.state.filterIntentKey or false
-CEF.state.filterRoleKey = CEF.state.filterRoleKey or false
+-- Sets { [key]=true }; vazios = sem filtro neste eixo (multi-seleção nos dropdowns).
+CEF.state.filterInstanceKeys = CEF.state.filterInstanceKeys or {}
+CEF.state.filterIntentKeys = CEF.state.filterIntentKeys or {}
+CEF.state.filterRoleKeys = CEF.state.filterRoleKeys or {}
+CEF.state.filterGuildSearchText = CEF.state.filterGuildSearchText or ""
+CEF.state.filterGuildClassKeys = CEF.state.filterGuildClassKeys or {}
+CEF.state.filterGuildRankKeys = CEF.state.filterGuildRankKeys or {}
+CEF.state.filterGuildOnlineKey = CEF.state.filterGuildOnlineKey
+if CEF.state.filterGuildOnlineKey == nil then
+  CEF.state.filterGuildOnlineKey = false
+end
+CEF.state.filterGuildLevelMin = CEF.state.filterGuildLevelMin or 1
+CEF.state.filterGuildLevelMax = CEF.state.filterGuildLevelMax or 60
 
 local mainFrame
 local scrollFrame
@@ -33,8 +43,22 @@ local function refreshUI()
   CEF.UIEngine.applyColumnWidths()
 end
 
+local function refreshGuildUI()
+  if CEF.GuildUI and CEF.GuildUI.refresh then
+    CEF.GuildUI.refresh()
+  end
+end
+
+local function refreshChatUI()
+  if CEF.ChatUI and CEF.ChatUI.refresh then
+    CEF.ChatUI.refresh()
+  end
+end
+
 CEF.UI.refreshRelativeTimesOnly = refreshRelativeTimesOnly
 CEF.UI.refreshUI = refreshUI
+CEF.UI.refreshGuildUI = refreshGuildUI
+CEF.UI.refreshChatUI = refreshChatUI
 
 local function hideAllFilterDropdowns()
   CEF.UIFilters.hideAllFilterDropdowns(mainFrame)
@@ -86,11 +110,57 @@ local function toggleMainFrame()
       CEF.UILayout.layoutHeaderColumns(mainFrame.header)
     end
     refreshUI()
+    if mainFrame.cefNavTab == "guild" then
+      refreshGuildUI()
+    elseif mainFrame.cefNavTab == "messages" then
+      refreshChatUI()
+    end
     if uiTicker then
       uiTicker:Show()
     end
   end
 end
+
+CEF.UI.toggleMainFrame = toggleMainFrame
+
+local function openWhisperInHub(name)
+  if not name or name == "" then
+    return
+  end
+  createMainUI()
+  if not mainFrame then
+    return
+  end
+  -- Garante que nenhum overlay de menu/guilda fica a bloquear.
+  if CEF.GuildUI and CEF.GuildUI.hideMemberContextMenu then
+    CEF.GuildUI.hideMemberContextMenu()
+  end
+  if CEF.UIFilters and CEF.UIFilters.hideAllFilterDropdowns then
+    CEF.UIFilters.hideAllFilterDropdowns(mainFrame)
+  end
+  if not mainFrame:IsShown() then
+    mainFrame:Show()
+    if uiTicker then
+      uiTicker:Show()
+    end
+  end
+  if ChatEdit_GetActiveWindow and ChatEdit_DeactivateChat then
+    local edit = ChatEdit_GetActiveWindow()
+    if edit then
+      pcall(ChatEdit_DeactivateChat, edit)
+    end
+  elseif ChatFrame1EditBox then
+    ChatFrame1EditBox:Hide()
+    if ChatFrame1EditBox.ClearFocus then
+      ChatFrame1EditBox:ClearFocus()
+    end
+  end
+  if CEF.Chat and CEF.Chat.focusWhisperAndShow then
+    CEF.Chat.focusWhisperAndShow(name)
+  end
+end
+
+CEF.UI.openWhisperInHub = openWhisperInHub
 
 local function createMinimapButton()
   if CEF.Minimap and CEF.Minimap.create then
@@ -100,23 +170,59 @@ end
 
 local eventFrame = CreateFrame("Frame")
 local staleAgeAcc = 0
+local guildRosterAcc = 0
 eventFrame:SetScript("OnUpdate", function(_, elapsed)
-  staleAgeAcc = staleAgeAcc + (elapsed or 0)
+  elapsed = elapsed or 0
+  staleAgeAcc = staleAgeAcc + elapsed
   if staleAgeAcc >= 1 then
     staleAgeAcc = 0
     purgeStaleEntries()
+  end
+  -- Refresh leve do roster enquanto a aba Guilda está visível.
+  if mainFrame and mainFrame:IsShown() and mainFrame.cefNavTab == "guild" and CEF.Guild and CEF.Guild.isInGuild() then
+    guildRosterAcc = guildRosterAcc + elapsed
+    if guildRosterAcc >= 15 then
+      guildRosterAcc = 0
+      CEF.Guild.requestRoster()
+    end
+  else
+    guildRosterAcc = 0
   end
 end)
 eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_LOGOUT")
 eventFrame:RegisterEvent("CHAT_MSG_CHANNEL")
+eventFrame:RegisterEvent("CHAT_MSG_WHISPER")
+eventFrame:RegisterEvent("CHAT_MSG_WHISPER_INFORM")
+eventFrame:RegisterEvent("CHAT_MSG_BN_WHISPER")
+eventFrame:RegisterEvent("CHAT_MSG_BN_WHISPER_INFORM")
+eventFrame:RegisterEvent("CHAT_MSG_SYSTEM")
+eventFrame:RegisterEvent("BN_FRIEND_LIST_SIZE_CHANGED")
+eventFrame:RegisterEvent("BN_FRIEND_INFO_CHANGED")
 eventFrame:RegisterEvent("MINIMAP_UPDATE_ZOOM")
+eventFrame:RegisterEvent("GUILD_ROSTER_UPDATE")
+eventFrame:RegisterEvent("PLAYER_GUILD_UPDATE")
 eventFrame:SetScript("OnEvent", function(_, event, ...)
   if event == "ADDON_LOADED" then
     if (...) == ADDON_NAME then
       CEF.DB.init()
+      if CEF.Locale and CEF.Locale.resolveAndApply then
+        CEF.Locale.resolveAndApply()
+      end
+      if CEF.refreshIntentLocaleLabels then
+        CEF.refreshIntentLocaleLabels()
+      end
+      if CEF.refreshRoleLocaleLabels then
+        CEF.refreshRoleLocaleLabels()
+      end
+      if CEF.Guild and CEF.Guild.refreshLocaleLabels then
+        CEF.Guild.refreshLocaleLabels()
+      end
       CEF.Entries.loadFromDB()
+      if CEF.Chat and CEF.Chat.loadFromDB then
+        CEF.Chat.loadFromDB()
+      end
     end
   elseif event == "PLAYER_LOGIN" then
     createMainUI()
@@ -124,17 +230,86 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     refreshUI()
   elseif event == "PLAYER_LOGOUT" then
     CEF.Entries.persist()
+    if CEF.Chat and CEF.Chat.persist then
+      CEF.Chat.persist()
+    end
   elseif event == "CHAT_MSG_CHANNEL" then
     onChatChannel(...)
+  elseif event == "CHAT_MSG_WHISPER"
+    or event == "CHAT_MSG_WHISPER_INFORM"
+    or event == "CHAT_MSG_BN_WHISPER"
+    or event == "CHAT_MSG_BN_WHISPER_INFORM"
+    or event == "CHAT_MSG_SYSTEM"
+    or event == "BN_FRIEND_LIST_SIZE_CHANGED"
+    or event == "BN_FRIEND_INFO_CHANGED" then
+    if CEF.Chat and CEF.Chat.handleEvent then
+      CEF.Chat.handleEvent(event, ...)
+    end
   elseif event == "MINIMAP_UPDATE_ZOOM" then
     if CEF.Minimap and CEF.Minimap.place then
       CEF.Minimap.place()
+    end
+  elseif event == "GUILD_ROSTER_UPDATE" then
+    if CEF.Guild then
+      CEF.Guild.refreshFromApi()
+      if mainFrame and mainFrame:IsShown() and mainFrame.cefNavTab == "guild" then
+        refreshGuildUI()
+      end
+    end
+  elseif event == "PLAYER_GUILD_UPDATE" then
+    if CEF.Guild then
+      if CEF.Guild.isInGuild() then
+        CEF.Guild.requestRoster()
+      else
+        CEF.Guild.refreshFromApi()
+        if mainFrame and mainFrame:IsShown() and mainFrame.cefNavTab == "guild" then
+          refreshGuildUI()
+        end
+      end
     end
   end
 end)
 
 SLASH_CLASSICERAFINDER1 = "/cef"
 SLASH_CLASSICERAFINDER2 = "/classicerafinder"
-SlashCmdList["CLASSICERAFINDER"] = function()
+SlashCmdList["CLASSICERAFINDER"] = function(msg)
+  msg = tostring(msg or "")
+  local single = msg:match("^%s*(%S+)%s*$")
+  if single and strlower(single) == "listchat" then
+    if CEF.Chat and CEF.Chat.debugListConversations then
+      local lines = CEF.Chat.debugListConversations()
+      if #lines == 0 then
+        print("|cffffcc66CEF:|r nenhuma conversa salva.")
+      else
+        print("|cffffcc66CEF:|r conversas salvas:")
+        for _, line in ipairs(lines) do
+          print("  " .. line)
+        end
+      end
+    end
+    return
+  end
+  local cmd, fromName, toName = msg:match("^%s*(%S+)%s+(%S+)%s+(%S+)")
+  if cmd and strlower(cmd) == "movechat" then
+    if not (CEF.Chat and CEF.Chat.moveConversationByNames) then
+      return
+    end
+    local ok, info = CEF.Chat.moveConversationByNames(fromName, toName)
+    if ok then
+      print("|cffffcc66CEF:|r conversa de |cff00fff6" .. fromName .. "|r movida para |cff00fff6" .. tostring(info) .. "|r.")
+      if CEF.ChatUI and CEF.ChatUI.refresh then
+        CEF.ChatUI.refresh()
+      end
+    elseif info == "source_not_found" then
+      print("|cffffcc66CEF:|r não achei conversa com o nome '" .. fromName .. "'.")
+    elseif info == "target_not_found" then
+      print("|cffffcc66CEF:|r não achei amigo Battle.net com o nome '" .. toName .. "'.")
+    elseif info == "same_conversation" then
+      print("|cffffcc66CEF:|r origem e destino são a mesma conversa.")
+    else
+      print("|cffffcc66CEF:|r uso: /cef movechat NomeOrigem NomeDestino")
+    end
+    return
+  end
   toggleMainFrame()
 end

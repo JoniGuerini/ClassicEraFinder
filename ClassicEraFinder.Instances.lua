@@ -31,7 +31,26 @@ local INSTANCE_ROWS = {
     },
   },
   { key = "Scholomance", needles = { "scholomance", "scholo", "gandling", "darkmaster" } },
-  { key = "Dire Maul", needles = { "dire maul", "dm north", "dm east", "dm west", "dm tribute", "immol'thar", "alzzin" } },
+  {
+    key = "Dire Maul",
+    needles = {
+      "dire maul",
+      " dm ",
+      "-> dm",
+      "> dm ",
+      "^dm ",
+      " dm,",
+      " dm.",
+      " dm/",
+      "/dm ",
+      "dm north",
+      "dm east",
+      "dm west",
+      "dm tribute",
+      "immol'thar",
+      "alzzin",
+    },
+  },
   { key = "Blackrock Spire", needles = { "ubrs", "lbrs", "blackrock spire", "lower spire", "upper spire", "drakkisath", "rend " } },
   { key = "Blackrock Depths", needles = { "blackrock depths", "brd ", " brd", "angerforge", "emperor ", "lokhtos", "arena run" } },
   { key = "Sunken Temple", needles = { "sunken temple", "atal'hakkar", "atal hakkar", " jammalan", "eranikus" } },
@@ -50,7 +69,22 @@ local INSTANCE_ROWS = {
   { key = "Blackfathom Deeps", needles = { "blackfathom", "bfd ", " bfd", "akumai" } },
   { key = "Shadowfang Keep", needles = { "shadowfang", "sfk ", " sfk", "arugal" } },
   { key = "Deadmines", needles = { "deadmines", "dead mines", "van cleef", "defias", "vc ", " vc" } },
-  { key = "Wailing Caverns", needles = { "wailing caverns", "wc run", " mutanus", "cobrahn" } },
+  {
+    key = "Wailing Caverns",
+    needles = {
+      "wailing caverns",
+      "for wc ",
+      " wc ",
+      " wc,",
+      " wc.",
+      " wc/",
+      "/wc ",
+      "^wc ",
+      "wc run",
+      " mutanus",
+      "cobrahn",
+    },
+  },
   { key = "Ragefire Chasm", needles = { "ragefire", "rfc ", " rfc", "bazzalan" } },
 }
 
@@ -98,20 +132,178 @@ local INSTANCE_LEVEL_RANGE = {
   ["Naxxramas"] = "60",
 }
 
-local function instanceMinLevelForSort(instanceKey)
+-- Nomes oficiais Blizzard (AreaTable / LFG), nunca tradução manual.
+-- areaId → C_Map.GetAreaInfo; lfgId → GetLFGDungeonInfo (melhor para alas SM).
+-- Preferência: lfgPrefer=true usa LFG primeiro (asas / nomes distintos AQ).
+local INSTANCE_BLIZZARD_IDS = {
+  ["Ragefire Chasm"] = { areaId = 2437, lfgId = 4 },
+  ["Wailing Caverns"] = { areaId = 718, lfgId = 1 },
+  ["Deadmines"] = { areaId = 1581, lfgId = 6 },
+  ["Shadowfang Keep"] = { areaId = 209, lfgId = 8 },
+  ["Blackfathom Deeps"] = { areaId = 719, lfgId = 10 },
+  ["The Stockade"] = { areaId = 717, lfgId = 12 },
+  ["Gnomeregan"] = { areaId = 721, lfgId = 14 },
+  ["Razorfen Kraul"] = { areaId = 491, lfgId = 16 },
+  ["SM Graveyard"] = { areaId = 796, lfgId = 18, lfgPrefer = true },
+  ["SM Library"] = { areaId = 796, lfgId = 165, lfgPrefer = true },
+  ["SM Armory"] = { areaId = 796, lfgId = 163, lfgPrefer = true },
+  ["SM Cathedral"] = { areaId = 796, lfgId = 164, lfgPrefer = true },
+  ["Razorfen Downs"] = { areaId = 722, lfgId = 20 },
+  ["Uldaman"] = { areaId = 1337, lfgId = 22 },
+  ["Zul'Farrak"] = { areaId = 1176, lfgId = 24 },
+  ["Maraudon"] = { areaId = 2100, lfgId = 26 },
+  ["Sunken Temple"] = { areaId = 1477, lfgId = 28 },
+  ["Blackrock Depths"] = { areaId = 1584, lfgId = 30 },
+  ["Blackrock Spire"] = { areaId = 1583, lfgId = 32 },
+  ["Dire Maul"] = { areaId = 2557, lfgId = 34 },
+  ["Scholomance"] = { areaId = 2057, lfgId = 2 },
+  ["Stratholme"] = { areaId = 2017, lfgId = 40 },
+  ["Zul'Gurub"] = { areaId = 1977, lfgId = 42 },
+  ["Molten Core"] = { areaId = 2717, lfgId = 48 },
+  ["Onyxia"] = { areaId = 2159, lfgId = 46 },
+  ["Blackwing Lair"] = { areaId = 2677, lfgId = 50 },
+  ["Ahn'Qiraj 20"] = { areaId = 3429, lfgId = 160, lfgPrefer = true },
+  ["Ahn'Qiraj 40"] = { areaId = 3428, lfgId = 161, lfgPrefer = true },
+  ["Naxxramas"] = { areaId = 3456, lfgId = 159 },
+}
+
+local displayNameCache = {}
+
+local function blizzardNameFromLfg(lfgId)
+  if not lfgId or not GetLFGDungeonInfo then
+    return nil
+  end
+  local name = GetLFGDungeonInfo(lfgId)
+  if type(name) == "string" and name ~= "" then
+    return name
+  end
+  return nil
+end
+
+local function blizzardNameFromArea(areaId)
+  if not areaId or not C_Map or not C_Map.GetAreaInfo then
+    return nil
+  end
+  local name = C_Map.GetAreaInfo(areaId)
+  if type(name) == "string" and name ~= "" then
+    return name
+  end
+  return nil
+end
+
+local function activeLocaleCode()
+  if CEF.Locale and CEF.Locale.getActiveCode then
+    return CEF.Locale.getActiveCode()
+  end
+  return (GetLocale and GetLocale()) or "enUS"
+end
+
+local function nameFromPack(instanceKey, localeCode)
+  local packs = CEF.INSTANCE_DISPLAY_NAMES
+  if type(packs) ~= "table" then
+    return nil
+  end
+  local pack = packs[localeCode] or packs.enUS
+  if not pack then
+    return nil
+  end
+  local n = pack[instanceKey]
+  if type(n) == "string" and n ~= "" then
+    return n
+  end
+  return nil
+end
+
+--- Nome da instância no idioma ativo do addon (tabelas oficiais Blizzard).
+--- Se o pack não tiver a chave, tenta API do cliente; senão a chave EN.
+function CEF.getInstanceDisplayName(instanceKey)
+  if not instanceKey or instanceKey == "" or instanceKey == "—" then
+    return instanceKey or "—"
+  end
+  local localeCode = activeLocaleCode()
+  local cacheKey = localeCode .. "\0" .. instanceKey
+  local cached = displayNameCache[cacheKey]
+  if cached then
+    return cached
+  end
+
+  local name = nameFromPack(instanceKey, localeCode)
+
+  -- Fallback: APIs do cliente (só batem se o idioma do jogo = pack).
+  if not name then
+    local meta = INSTANCE_BLIZZARD_IDS[instanceKey]
+    if meta then
+      if meta.lfgPrefer then
+        name = blizzardNameFromLfg(meta.lfgId) or blizzardNameFromArea(meta.areaId)
+      else
+        name = blizzardNameFromArea(meta.areaId) or blizzardNameFromLfg(meta.lfgId)
+      end
+    end
+  end
+
+  if not name or name == "" then
+    name = instanceKey
+  end
+  displayNameCache[cacheKey] = name
+  return name
+end
+
+function CEF.clearInstanceDisplayNameCache()
+  wipe(displayNameCache)
+end
+
+-- Chave especial do filtro: só instâncias cujo range recomendado inclui o nível do jogador.
+CEF.FILTER_INSTANCE_MY_LEVEL = "__cef_my_level__"
+
+local function instanceLevelRangeBounds(instanceKey)
   local plain = INSTANCE_LEVEL_RANGE[instanceKey]
   if not plain then
-    return 999
+    return nil, nil
   end
-  local minV = plain:match("^(%d+)%-(%d+)$")
-  if minV then
-    return tonumber(minV) or 999
+  local minV, maxV = plain:match("^(%d+)%-(%d+)$")
+  if minV and maxV then
+    return tonumber(minV), tonumber(maxV)
   end
   local solo = plain:match("^(%d+)$")
   if solo then
-    return tonumber(solo) or 999
+    local n = tonumber(solo)
+    return n, n
   end
-  return 999
+  return nil, nil
+end
+
+function CEF.instanceFitsPlayerLevel(instanceKey, playerLevel)
+  local lvl = playerLevel or UnitLevel("player")
+  if not lvl or not instanceKey then
+    return false
+  end
+  local minV, maxV = instanceLevelRangeBounds(instanceKey)
+  if not minV or not maxV then
+    return false
+  end
+  -- Dentro do range: exclui dungeon “alta demais” (lvl < min) e “baixa demais” (lvl > max).
+  return lvl >= minV and lvl <= maxV
+end
+
+function CEF.countInstancesForPlayerLevel(playerLevel)
+  local lvl = playerLevel or UnitLevel("player")
+  local n = 0
+  local seen = {}
+  for _, row in ipairs(INSTANCE_ROWS) do
+    local k = row.key
+    if not seen[k] then
+      seen[k] = true
+      if CEF.instanceFitsPlayerLevel(k, lvl) then
+        n = n + 1
+      end
+    end
+  end
+  return n
+end
+
+local function instanceMinLevelForSort(instanceKey)
+  local minV = instanceLevelRangeBounds(instanceKey)
+  return minV or 999
 end
 
 -- Entradas do menu do filtro: opção (key false = todas) ou cabeçalho de secção.
@@ -149,11 +341,12 @@ do
 
   local opts = {}
   opts[#opts + 1] = { kind = "opt", key = false }
-  opts[#opts + 1] = { kind = "hdr", text = "Masmorras" }
+  opts[#opts + 1] = { kind = "opt", key = CEF.FILTER_INSTANCE_MY_LEVEL }
+  opts[#opts + 1] = { kind = "hdr", textKey = "CATEGORY_DUNGEONS" }
   for _, k in ipairs(dungeons) do
     opts[#opts + 1] = { kind = "opt", key = k }
   end
-  opts[#opts + 1] = { kind = "hdr", text = "Raids" }
+  opts[#opts + 1] = { kind = "hdr", textKey = "CATEGORY_RAIDS" }
   for _, k in ipairs(raids) do
     opts[#opts + 1] = { kind = "opt", key = k }
   end
@@ -237,11 +430,31 @@ function CEF.getInstanceDetectionRowsGroupedSorted()
   return { dungeons = d, raids = r }
 end
 
-function CEF.instanceFilterOptionRichText(instKey)
-  if instKey == false or instKey == nil then
-    return "|cffffffffTodas as instâncias|r"
+function CEF.instanceFilterOptionRichText(instKeyOrSet)
+  -- Menu: chave única (false = “todas”; string = uma instância / modo especial).
+  if type(instKeyOrSet) ~= "table" then
+    if instKeyOrSet == false or instKeyOrSet == nil then
+      return "|cffffffff" .. CEF.L.FILTER_ALL_INSTANCES .. "|r"
+    end
+    if instKeyOrSet == CEF.FILTER_INSTANCE_MY_LEVEL then
+      local n = CEF.countInstancesForPlayerLevel()
+      return ("|cffffffff%s|r  |cffcccccc(%d)|r"):format(CEF.L.FILTER_MY_LEVEL_INSTANCES, n)
+    end
+    return instanceNameRichOpenTag(instKeyOrSet) .. CEF.getInstanceDisplayName(instKeyOrSet) .. "|r  " .. recommendedLevelRichText(instKeyOrSet)
   end
-  return instanceNameRichOpenTag(instKey) .. instKey .. "|r  " .. recommendedLevelRichText(instKey)
+  -- Resumo do botão: set multi-seleção.
+  local keys = CEF.filterSetSortedKeys(instKeyOrSet)
+  if #keys == 0 then
+    return "|cffffffff" .. CEF.L.FILTER_ALL_INSTANCES .. "|r"
+  end
+  if #keys == 1 then
+    local k = keys[1]
+    if k == CEF.FILTER_INSTANCE_MY_LEVEL then
+      return CEF.instanceFilterOptionRichText(k)
+    end
+    return instanceNameRichOpenTag(k) .. CEF.getInstanceDisplayName(k) .. "|r  " .. recommendedLevelRichText(k)
+  end
+  return "|cffffffff" .. CEF.L("FILTER_N_INSTANCES", #keys) .. "|r"
 end
 
 -- Scarlet Monastery: 4 alas. Mensagem genérica (sem gy/lib/arm/cath) → assume full clear nas 4.
@@ -306,12 +519,54 @@ local function scarletGenericInText(lower)
   return false
 end
 
+-- «DM» sozinho no fim (ex.: «LF3M DPS DM», «… HEALER DM») — sem espaço depois do m.
+local function direMaulIsolatedDmPos(lower)
+  local t = lower:match("^%s*(.-)%s*$") or lower
+  local a = t:find("[%s%p]dm$")
+  if a then
+    return a
+  end
+  if #t >= 3 and t:sub(-2) == "dm" then
+    local prev = t:sub(-3, -3)
+    if prev:match("[%s%p]") then
+      return #t - 3
+    end
+  end
+  if t == "dm" or t:find("^dm[%s%p]", 1) then
+    return 1
+  end
+  return nil
+end
+
+-- «WC» como Wailing Caverns no fim (ex.: «LF1M DPS WC») ou só «wc» + separador.
+local function wailingCavernsIsolatedWcPos(lower)
+  local t = lower:match("^%s*(.-)%s*$") or lower
+  local a = t:find("[%s%p]wc$")
+  if a then
+    return a
+  end
+  if #t >= 3 and t:sub(-2) == "wc" then
+    local prev = t:sub(-3, -3)
+    if prev:match("[%s%p]") then
+      return #t - 3
+    end
+  end
+  if t == "wc" or t:find("^wc[%s%p]", 1) then
+    return 1
+  end
+  return nil
+end
+
 -- Todas as instâncias reconhecidas na mensagem; ordem = primeira ocorrência no texto.
 function CEF.detectInstances(text)
   if not text or text == "" then
     return {}
   end
-  local lower = text:lower()
+  -- Igual a messageLooksLFG: minúsculas + espaços colapsados (evita falhar em «for  wc» no chat).
+  local lower = CEF.normalizeMessage(text)
+  if lower == "" then
+    return {}
+  end
   local hits = {}
   for _, row in ipairs(INSTANCE_ROWS) do
     local bestPos
@@ -323,6 +578,20 @@ function CEF.detectInstances(text)
     end
     if bestPos then
       hits[row.key] = bestPos
+    end
+  end
+
+  if not hits["Dire Maul"] then
+    local pDm = direMaulIsolatedDmPos(lower)
+    if pDm then
+      hits["Dire Maul"] = pDm
+    end
+  end
+
+  if not hits["Wailing Caverns"] then
+    local pWc = wailingCavernsIsolatedWcPos(lower)
+    if pWc then
+      hits["Wailing Caverns"] = pWc
     end
   end
 
@@ -381,6 +650,15 @@ function CEF.entryHasInstance(e, key)
   return false
 end
 
+function CEF.entryMatchesPlayerLevelInstances(e, playerLevel)
+  for _, k in ipairs(entryInstancesList(e)) do
+    if CEF.instanceFitsPlayerLevel(k, playerLevel) then
+      return true
+    end
+  end
+  return false
+end
+
 -- Coluna: nome + intervalo de níveis na mesma linha por instância.
 function CEF.entryInstancesComboRichText(e)
   local list = entryInstancesList(e)
@@ -389,7 +667,7 @@ function CEF.entryInstancesComboRichText(e)
   end
   local parts = {}
   for _, k in ipairs(list) do
-    parts[#parts + 1] = instanceNameRichOpenTag(k) .. k .. "|r  " .. recommendedLevelRichText(k)
+    parts[#parts + 1] = instanceNameRichOpenTag(k) .. CEF.getInstanceDisplayName(k) .. "|r  " .. recommendedLevelRichText(k)
   end
   -- Quebra extra (linha em branco) para separar visualmente instâncias.
   return table.concat(parts, "\n\n")
@@ -403,7 +681,7 @@ function CEF.entryInstancesComboRichTextInline(e)
   end
   local parts = {}
   for _, k in ipairs(list) do
-    parts[#parts + 1] = instanceNameRichOpenTag(k) .. k .. "|r  " .. recommendedLevelRichText(k)
+    parts[#parts + 1] = instanceNameRichOpenTag(k) .. CEF.getInstanceDisplayName(k) .. "|r  " .. recommendedLevelRichText(k)
   end
   return table.concat(parts, ", ")
 end
@@ -435,7 +713,7 @@ function CEF.getInstanceDetectionCatalog()
     rows = INSTANCE_ROWS,
     scarletGeneric = SCARLET_GENERIC_NEEDLES,
     scarletGenericUiHints = {
-      "(regra automática) «sm» como palavra isolada — ex.: lfg sm, dps sm, tank sm (não colado a outras letras; não conta se já nomeares GY/Lib/Arm/Cath)",
+      CEF.L.TERMS_SM_AUTO_HINT,
     },
   }
 end

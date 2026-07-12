@@ -1,0 +1,137 @@
+-- Locale: English (enUS) — fallback padrão.
+
+ClassicEraFinder = ClassicEraFinder or {}
+local CEF = ClassicEraFinder
+
+CEF.Locale.register("enUS", {
+  -- Language chooser
+  LOCALE_LABEL = "Language",
+  LOCALE_AUTO = "Automatic (game language)",
+  LOCALE_AUTO_SUMMARY = "|cffffffffAutomatic|r |cffaaaaaa(%s)|r",
+
+  -- Tabs / chrome
+  TAB_LIST = "List",
+  TAB_GUILD = "Guild",
+  TAB_MESSAGES = "Messages",
+  TAB_TERMS = "Terms",
+  RESET = "Reset",
+  SEARCH_PLACEHOLDER_LIST = "Search name or instance…",
+  SEARCH_PLACEHOLDER_GUILD = "Search name…",
+
+  -- Messages hub
+  CHAT_SEARCH_PLACEHOLDER = "Search conversations or friends…",
+  CHAT_SECTION_RECENT = "Recent",
+  CHAT_SECTION_BNET = "Battle.net friends",
+  CHAT_SECTION_WHISPERS = "Whispers",
+  CHAT_NO_CONVERSATIONS = "No conversations yet.",
+  CHAT_NO_WHISPERS = "No whispers yet.",
+  CHAT_NO_FRIENDS = "No Battle.net friends found.",
+  CHAT_SELECT_CONVERSATION = "Select a conversation",
+  CHAT_EMPTY_THREAD = "Pick a |cff00fff6Battle.net|r friend or a |cffff80ffwhisper|r to start.",
+  CHAT_EMPTY_THREAD_NOTE = "|cff00fff6Battle.net|r chats only save messages exchanged in-game while the addon is active.",
+  CHAT_KIND_WHISPER = "Whisper",
+  CHAT_KIND_BNET = "Battle.net",
+  CHAT_SEND = "Send",
+  CHAT_YOU = "You",
+  CHAT_DELETE_CONVERSATION = "Delete conversation",
+  CHAT_DELETE_CONFIRM_TITLE = "Delete conversation?",
+  CHAT_DELETE_CONFIRM_BODY = "Delete the conversation with %s? This cannot be undone.",
+  CHAT_DELETE_CONFIRM_BODY_GENERIC = "Delete this conversation? This cannot be undone.",
+  CHAT_DELETE_CONFIRM_CANCEL = "Cancel",
+  CHAT_DELETE_CONFIRM_OK = "Delete",
+  CHAT_REPLY = "Reply",
+  CHAT_REPLYING_TO = "Replying to",
+
+  -- List columns
+  COL_INSTANCE_LEVELS = "Instance / levels",
+  COL_MESSAGE = "Message",
+  COL_CHARACTER = "Character",
+  COL_TIME = "Time",
+  COL_ACTION = "Action",
+
+  -- Actions
+  INVITE = "Invite",
+  WHISPER = "Whisper",
+  CTX_INVITE_TO_GROUP = "Invite to group",
+
+  -- List filters
+  FILTER_ALL_INSTANCES = "All instances",
+  FILTER_MY_LEVEL_INSTANCES = "Instances for my character",
+  FILTER_N_INSTANCES = "%d instances",
+  FILTER_ALL_LISTINGS = "All listings",
+  FILTER_LOOKING_FOR_GROUP = "Looking for group",
+  FILTER_LOOKING_FOR_MEMBERS = "Looking for members",
+  FILTER_N_TYPES = "%d types",
+  FILTER_ANY_ROLE = "Any role",
+  FILTER_ROLE_TANK = "Tank",
+  FILTER_ROLE_HEAL = "Healer",
+  FILTER_ROLE_DPS = "DPS",
+  FILTER_N_ROLES = "%d roles",
+  CATEGORY_DUNGEONS = "Dungeons",
+  CATEGORY_RAIDS = "Raids",
+
+  -- Tooltips / time
+  TOOLTIP_INSTANCE = "Instance:",
+  TOOLTIP_CHARACTER = "Character:",
+  TOOLTIP_CHANNEL = "Channel:",
+  TIME_NOW = "now",
+  TIME_MINUTES = "%d min",
+  TIME_HOURS = "%d h",
+  TIME_DAYS = "%d d",
+
+  -- Minimap
+  MINIMAP_TIP_LEFT = "Left-click: open or close",
+  MINIMAP_TIP_RIGHT = "Right-drag: move on minimap",
+
+  -- Guild
+  COL_NAME = "Name",
+  COL_LEVEL = "Level",
+  COL_CLASS = "Class",
+  COL_RANK = "Rank",
+  COL_ZONE = "Zone",
+  COL_STATUS = "Status",
+  COL_NOTE = "Note",
+  COL_OFFICER_NOTE = "Officer note",
+  STATUS_ONLINE = "Online",
+  STATUS_OFFLINE = "Offline",
+  FILTER_ALL = "All",
+  FILTER_ALL_CLASSES = "All classes",
+  FILTER_N_CLASSES = "%d classes",
+  FILTER_ALL_RANKS = "All ranks",
+  FILTER_N_RANKS = "%d ranks",
+  CLASS_WARRIOR = "Warrior",
+  CLASS_PALADIN = "Paladin",
+  CLASS_HUNTER = "Hunter",
+  CLASS_ROGUE = "Rogue",
+  CLASS_PRIEST = "Priest",
+  CLASS_SHAMAN = "Shaman",
+  CLASS_MAGE = "Mage",
+  CLASS_WARLOCK = "Warlock",
+  CLASS_DRUID = "Druid",
+  GUILD_EMPTY_NOT_IN_GUILD = "You are not in a guild.",
+  GUILD_EMPTY_UPDATING = "Updating roster…",
+  GUILD_EMPTY_NO_MEMBERS = "No members in roster.",
+  GUILD_EMPTY_NO_MATCH = "No members match the filters.",
+  GUILD_FOOTER_NO_GUILD = "No guild",
+  GUILD_FOOTER_FILTERED = "|cff66ff66Online %d|r |cffaaaaaa/|r |cffffffff%d|r  ·  |cffccccccShowing %d (%d online)|r",
+  GUILD_FOOTER_COUNTS = "|cff66ff66Online %d|r |cffaaaaaa/|r |cffffffff%d members|r",
+
+  -- Terms page
+  TERMS_ABOUT_TITLE = "|cffffcc66About this page|r",
+  TERMS_ABOUT_BODY = "Reference to the patterns Classic Era Finder uses in chat. Raid markers show as icons in the list: {square}, {{circle}}, {rt6}, star, skull, etc. Lists update with new addon versions.",
+  TERMS_INSTANCES_TITLE = "|cffffcc66Recognized instances|r",
+  TERMS_INSTANCES_BODY = "Case-insensitive text match. The chat line is normalized (collapsed spaces; |c…|r codes and texture markers stripped). The Keywords column mirrors the same code entries; abbreviations at the end of a sentence or with punctuation are also handled (e.g. “… DM” Dire Maul, “… WC” or “for wc ” Wailing Caverns, “STRAT(live)” Stratholme) without every variant appearing in the list.",
+  TERMS_COL_INSTANCE_ZONE = "|cffc8c8c8Instance / zone|r",
+  TERMS_COL_LEVELS = "|cffc8c8c8Levels|r",
+  TERMS_COL_KEYWORDS = "|cffc8c8c8Keywords|r",
+  TERMS_SM_GENERIC_TITLE = "Scarlet Monastery — generic phrases",
+  TERMS_SM_GENERIC_BODY = "With one of these phrases and no named wing (GY/Lib/Arm/Cath), all 4 wings are assumed. Messages with only “sm” as a word (e.g. “LFG SM”) also count.",
+  TERMS_COL_PHRASE = "Phrase / fragment",
+  TERMS_LFG_PATTERNS_TITLE = "LFG patterns (messageLooksLFG)",
+  TERMS_LFG_PATTERNS_BODY = "Fragments that help treat the line as a group ad (with other rules). The list includes lf1m, lf2m, lf3m and the same normalized text used for instance detection.",
+  TERMS_COL_PATTERN_TERM = "Pattern / term",
+  TERMS_EXCLUSIONS_TITLE = "Exclusions (craft / portal / enchant)",
+  TERMS_EXCLUSIONS_BODY = "Do not list as an instance advertisement.",
+  TERMS_COL_PATTERN_FRAGMENT = "Pattern / fragment",
+  TERMS_SM_AUTO_HINT = "(automatic rule) “sm” as a standalone word — e.g. lfg sm, need sm, sm group (not glued to other letters; ignored if you already name GY/Lib/Arm/Cath)",
+})

@@ -113,9 +113,9 @@ end
 function Entries.rebuildFilteredView()
   wipe(filteredView)
   local s = CEF.state or {}
-  local fi = s.filterInstanceKey
-  local fint = s.filterIntentKey
-  local fr = s.filterRoleKey
+  local fi = s.filterInstanceKeys
+  local fint = s.filterIntentKeys
+  local fr = s.filterRoleKeys
   local ft = s.filterSearchText
   if ft == nil then
     ft = ""

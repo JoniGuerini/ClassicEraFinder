@@ -75,7 +75,8 @@ function CEF.UI.createMainUI()
   local closeFs = close:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   closeFs:SetAllPoints()
   closeFs:SetText("×")
-  close:SetScript("OnClick", function()
+
+  local function closeMainWindow()
     CEF.UIUtils.cefTooltipHide()
     if f.cefApplyNavTab then
       f.cefApplyNavTab("list")
@@ -88,10 +89,39 @@ function CEF.UI.createMainUI()
     if CEF.UI.uiTicker then
       CEF.UI.uiTicker:Hide()
     end
+  end
+
+  close:SetScript("OnClick", closeMainWindow)
+
+  -- ESC: fecha dropdown aberto primeiro; senão fecha a janela (sem abrir o menu do jogo).
+  f:SetScript("OnKeyDown", function(self, key)
+    if key ~= "ESCAPE" then
+      if self.SetPropagateKeyboardInput then
+        self:SetPropagateKeyboardInput(true)
+      end
+      return
+    end
+    if self.SetPropagateKeyboardInput then
+      self:SetPropagateKeyboardInput(false)
+    end
+    if CEF.UIFilters.anyFilterMenuShown(self) then
+      CEF.UIFilters.hideAllFilterDropdowns(self)
+      return
+    end
+    closeMainWindow()
+  end)
+  f:HookScript("OnShow", function(self)
+    self:EnableKeyboard(true)
+    if self.SetPropagateKeyboardInput then
+      self:SetPropagateKeyboardInput(true)
+    end
+  end)
+  f:HookScript("OnHide", function(self)
+    self:EnableKeyboard(false)
   end)
 
   local NAV_H = 30
-  local TAB_BTN_W = 132
+  local TAB_BTN_W = 108
   local TAB_BTN_H = 24
 
   local navBar = CreateFrame("Frame", nil, f)
@@ -105,7 +135,9 @@ function CEF.UI.createMainUI()
   local function makeNavTabButton(parent, xOff, label)
     local b = CreateFrame("Button", nil, parent)
     b:SetSize(TAB_BTN_W, TAB_BTN_H)
-    b:SetPoint("LEFT", parent, "LEFT", xOff, 0)
+    if xOff ~= nil then
+      b:SetPoint("LEFT", parent, "LEFT", xOff, 0)
+    end
     local tbg = b:CreateTexture(nil, "BACKGROUND")
     tbg:SetAllPoints()
     tbg:SetColorTexture(0.12, 0.1, 0.08, 0.95)
@@ -117,10 +149,15 @@ function CEF.UI.createMainUI()
     return b
   end
 
-  local btnLista = makeNavTabButton(navBar, 10, "Lista")
-  local btnTermos = makeNavTabButton(navBar, 10 + TAB_BTN_W + 6, "Termos")
+  local btnLista = makeNavTabButton(navBar, 8, CEF.L.TAB_LIST)
+  local btnGuilda = makeNavTabButton(navBar, 8 + TAB_BTN_W + 4, CEF.L.TAB_GUILD)
+  local btnMensagens = makeNavTabButton(navBar, 8 + (TAB_BTN_W + 4) * 2, CEF.L.TAB_MESSAGES)
+  local btnTermos = makeNavTabButton(navBar, nil, CEF.L.TAB_TERMS)
+  btnTermos:SetPoint("RIGHT", navBar, "RIGHT", -8, 0)
   f.cefNavBar = navBar
   f.cefBtnLista = btnLista
+  f.cefBtnGuilda = btnGuilda
+  f.cefBtnMensagens = btnMensagens
   f.cefBtnTermos = btnTermos
 
   local filterBar = CreateFrame("Frame", nil, f)
@@ -144,7 +181,7 @@ function CEF.UI.createMainUI()
   searchPlaceholder:SetPoint("LEFT", searchBorder, "LEFT", 6, 0)
   searchPlaceholder:SetPoint("RIGHT", searchBorder, "RIGHT", -6, 0)
   searchPlaceholder:SetJustifyH("LEFT")
-  searchPlaceholder:SetText("Procurar nome ou instância…")
+  searchPlaceholder:SetText(CEF.L.SEARCH_PLACEHOLDER_LIST)
 
   local searchEdit = CreateFrame("EditBox", nil, searchBorder)
   searchEdit:SetFontObject(GameFontHighlightSmall)
@@ -183,6 +220,11 @@ function CEF.UI.createMainUI()
   end)
   updateSearchPlaceholder()
 
+  -- Forward decls: OnClick dos menus chama estes refresh antes da definição local.
+  local refreshFilterMenuList
+  local refreshIntentFilterMenuList
+  local refreshRoleFilterMenuList
+
   local dropBtn = CreateFrame("Button", nil, filterBar)
   dropBtn:SetSize(FILTER_INSTANCE_DROPDOWN_W, SEARCH_EDIT_H)
   dropBtn:SetPoint("TOPLEFT", searchBorder, "TOPRIGHT", FILTER_SEARCH_INSTANCE_GAP, 0)
@@ -195,14 +237,11 @@ function CEF.UI.createMainUI()
   filterDropSummaryFS:SetPoint("LEFT", 8, 0)
   filterDropSummaryFS:SetPoint("RIGHT", dropBtn, "RIGHT", -22, 0)
   filterDropSummaryFS:SetJustifyH("LEFT")
-  filterDropSummaryFS:SetText(CEF.instanceFilterOptionRichText(st().filterInstanceKey))
+  filterDropSummaryFS:SetText(CEF.instanceFilterOptionRichText(st().filterInstanceKeys))
 
-  -- Textura da UI do jogo (Unicode ▼ não existe nas fontes do WoW → “retângulo”).
-  local dropArrow = dropBtn:CreateTexture(nil, "OVERLAY")
-  dropArrow:SetTexture("Interface\\Buttons\\UI-ScrollBar-Arrow-Down-Up")
-  dropArrow:SetSize(16, 16)
-  dropArrow:SetPoint("RIGHT", dropBtn, "RIGHT", -5, -1)
-  dropArrow:SetVertexColor(0.95, 0.82, 0.45)
+  -- Seta custom (cima/baixo) — sem textura Blizzard.
+  CEF.UIFilters.attachDropChevron(dropBtn, 16)
+  f.cefDropInstanceBtn = dropBtn
 
   local filterMenu = CreateFrame("Frame", nil, f)
   filterMenu:SetWidth(FILTER_INSTANCE_DROPDOWN_W)
@@ -274,29 +313,39 @@ function CEF.UI.createMainUI()
       if row.isHeader then
         return
       end
-      rb:SetColorTexture(0.26, 0.2, 0.14, 1)
+      CEF.UIFilters.applyFilterRowBg(row, true)
     end)
     row:SetScript("OnLeave", function()
-      if row.isHeader then
-        rb:SetColorTexture(0.08, 0.07, 0.06, 1)
-        return
-      end
-      rb:SetColorTexture(0.13, 0.11, 0.09, 0.96)
+      CEF.UIFilters.applyFilterRowBg(row, false)
     end)
 
     local rlab = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    rlab:SetPoint("LEFT", 8, 0)
+    rlab:SetPoint("LEFT", row, "LEFT", CEF.UIFilters.filterCheckLabelLeft(), 0)
     rlab:SetJustifyH("LEFT")
     rlab:SetWidth(FILTER_INSTANCE_DROPDOWN_W - 24)
     row.label = rlab
+    CEF.UIFilters.attachFilterRowCheck(row)
 
     row:SetScript("OnClick", function(self)
       if self.isHeader then
         return
       end
-      st().filterInstanceKey = self.optionKey
-      CEF.UIFilters.updateFilterDropSummary(filterDropSummaryFS, st().filterInstanceKey)
-      CEF.UIFilters.hideAllFilterDropdowns(f)
+      local myLvl = CEF.FILTER_INSTANCE_MY_LEVEL
+      if self.optionKey == false or self.optionKey == nil then
+        st().filterInstanceKeys = CEF.filterSetClear()
+      elseif self.optionKey == myLvl then
+        if CEF.filterSetContains(st().filterInstanceKeys, myLvl) then
+          st().filterInstanceKeys = CEF.filterSetClear()
+        else
+          st().filterInstanceKeys = { [myLvl] = true }
+        end
+      else
+        local cur = CEF.normalizeFilterSet(st().filterInstanceKeys)
+        cur[myLvl] = nil
+        st().filterInstanceKeys = CEF.filterSetToggle(cur, self.optionKey)
+      end
+      CEF.UIFilters.updateFilterDropSummary(filterDropSummaryFS, st().filterInstanceKeys)
+      refreshFilterMenuList()
       if scrollFrame then
         scrollFrame:SetVerticalScroll(0)
       end
@@ -307,11 +356,12 @@ function CEF.UI.createMainUI()
     row:Hide()
   end
 
-  local function refreshFilterMenuList()
+  refreshFilterMenuList = function()
     filterMenu:SetWidth(dropBtn:GetWidth())
     local mw = filterMenu:GetWidth()
-    local labelW = math.max(40, mw - 24)
+    local labelW = math.max(40, mw - CEF.UIFilters.filterCheckLabelLeft() - 8)
     local opts = CEF.INSTANCE_FILTER_MENU_OPTS
+    local selected = st().filterInstanceKeys
     local y = 0
     for i = 1, FILTER_MENU_MAX_ROWS do
       local row = filterMenuRows[i]
@@ -326,17 +376,22 @@ function CEF.UI.createMainUI()
           row.isHeader = true
           row.optionKey = nil
           row:EnableMouse(false)
-          row.bg:SetColorTexture(0.08, 0.07, 0.06, 1)
+          row.label:ClearAllPoints()
+          row.label:SetPoint("LEFT", row, "LEFT", 8, 0)
           row.label:SetTextColor(1, 0.82, 0.18)
-          row.label:SetText(entry.text)
+          row.label:SetText((entry.textKey and CEF.L[entry.textKey]) or entry.text or "")
+          CEF.UIFilters.setFilterRowChecked(row, false, false)
         else
           row.isHeader = false
           row:EnableMouse(true)
           row.optionKey = entry.key
-          row.bg:SetColorTexture(0.13, 0.11, 0.09, 0.96)
+          row.label:ClearAllPoints()
+          row.label:SetPoint("LEFT", row, "LEFT", CEF.UIFilters.filterCheckLabelLeft(), 0)
           row.label:SetTextColor(1, 1, 1)
           row.label:SetText(CEF.instanceFilterOptionRichText(entry.key))
+          CEF.UIFilters.setFilterRowChecked(row, CEF.filterSetContains(selected, entry.key), true)
         end
+        CEF.UIFilters.applyFilterRowBg(row, false)
         row:Show()
         y = y + FILTER_MENU_ROW_H
       else
@@ -348,7 +403,12 @@ function CEF.UI.createMainUI()
     mChild:SetHeight(math.max(FILTER_MENU_ROW_H, nOpts * FILTER_MENU_ROW_H))
     local vis = math.min(11, math.max(1, nOpts))
     filterMenu:SetHeight(8 + vis * FILTER_MENU_ROW_H)
-    mScroll:SetVerticalScroll(0)
+    local maxO = math.max(0, mChild:GetHeight() - mScroll:GetHeight())
+    local cur = mScroll:GetVerticalScroll() or 0
+    if cur > maxO then
+      cur = maxO
+    end
+    mScroll:SetVerticalScroll(cur)
   end
 
   dropBtn:SetScript("OnClick", function()
@@ -358,6 +418,7 @@ function CEF.UI.createMainUI()
       CEF.UIFilters.hideFilterIntentMenu(f)
       CEF.UIFilters.hideFilterRoleMenu(f)
       refreshFilterMenuList()
+      mScroll:SetVerticalScroll(0)
       filterMenu:Show()
       filterMenu:Raise()
       CEF.UIFilters.syncFilterDropBlocker(f)
@@ -377,13 +438,10 @@ function CEF.UI.createMainUI()
   filterIntentDropSummaryFS:SetPoint("LEFT", 8, 0)
   filterIntentDropSummaryFS:SetPoint("RIGHT", intentDropBtn, "RIGHT", -22, 0)
   filterIntentDropSummaryFS:SetJustifyH("LEFT")
-  filterIntentDropSummaryFS:SetText(CEF.intentFilterOptionRichText(st().filterIntentKey))
+  filterIntentDropSummaryFS:SetText(CEF.intentFilterOptionRichText(st().filterIntentKeys))
 
-  local idArrow = intentDropBtn:CreateTexture(nil, "OVERLAY")
-  idArrow:SetTexture("Interface\\Buttons\\UI-ScrollBar-Arrow-Down-Up")
-  idArrow:SetSize(16, 16)
-  idArrow:SetPoint("RIGHT", intentDropBtn, "RIGHT", -5, -1)
-  idArrow:SetVertexColor(0.95, 0.82, 0.45)
+  CEF.UIFilters.attachDropChevron(intentDropBtn, 16)
+  f.cefDropIntentBtn = intentDropBtn
 
   local intentFilterMenu = CreateFrame("Frame", nil, f)
   intentFilterMenu:SetWidth(FILTER_INTENT_DROPDOWN_W)
@@ -454,22 +512,27 @@ function CEF.UI.createMainUI()
     irow.bg = irb
 
     irow:SetScript("OnEnter", function()
-      irb:SetColorTexture(0.26, 0.2, 0.14, 1)
+      CEF.UIFilters.applyFilterRowBg(irow, true)
     end)
     irow:SetScript("OnLeave", function()
-      irb:SetColorTexture(0.13, 0.11, 0.09, 0.96)
+      CEF.UIFilters.applyFilterRowBg(irow, false)
     end)
 
     local irlab = irow:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    irlab:SetPoint("LEFT", 8, 0)
+    irlab:SetPoint("LEFT", irow, "LEFT", CEF.UIFilters.filterCheckLabelLeft(), 0)
     irlab:SetJustifyH("LEFT")
     irlab:SetWidth(FILTER_INTENT_DROPDOWN_W - 24)
     irow.label = irlab
+    CEF.UIFilters.attachFilterRowCheck(irow)
 
     irow:SetScript("OnClick", function(self)
-      st().filterIntentKey = self.intentKey
-      CEF.UIFilters.updateIntentFilterDropSummary(filterIntentDropSummaryFS, st().filterIntentKey)
-      CEF.UIFilters.hideFilterIntentMenu(f)
+      if self.intentKey == false or self.intentKey == nil then
+        st().filterIntentKeys = CEF.filterSetClear()
+      else
+        st().filterIntentKeys = CEF.filterSetToggle(st().filterIntentKeys, self.intentKey)
+      end
+      CEF.UIFilters.updateIntentFilterDropSummary(filterIntentDropSummaryFS, st().filterIntentKeys)
+      refreshIntentFilterMenuList()
       if scrollFrame then
         scrollFrame:SetVerticalScroll(0)
       end
@@ -480,11 +543,12 @@ function CEF.UI.createMainUI()
     irow:Hide()
   end
 
-  local function refreshIntentFilterMenuList()
+  refreshIntentFilterMenuList = function()
     intentFilterMenu:SetWidth(intentDropBtn:GetWidth())
     local imw = intentFilterMenu:GetWidth()
-    local ilabelW = math.max(40, imw - 24)
+    local ilabelW = math.max(40, imw - CEF.UIFilters.filterCheckLabelLeft() - 8)
     local iopts = CEF.INTENT_FILTER_MENU_OPTS
+    local selected = st().filterIntentKeys
     local iy = 0
     for i = 1, INTENT_FILTER_MENU_MAX_ROWS do
       local irow = intentFilterMenuRows[i]
@@ -496,9 +560,10 @@ function CEF.UI.createMainUI()
         irow:SetHeight(FILTER_MENU_ROW_H)
         irow.label:SetWidth(ilabelW)
         irow.intentKey = opt.key
-        irow.bg:SetColorTexture(0.13, 0.11, 0.09, 0.96)
         irow.label:SetTextColor(1, 1, 1)
         irow.label:SetText(opt.label)
+        CEF.UIFilters.setFilterRowChecked(irow, CEF.filterSetContains(selected, opt.key), true)
+        CEF.UIFilters.applyFilterRowBg(irow, false)
         irow:Show()
         iy = iy + FILTER_MENU_ROW_H
       else
@@ -510,7 +575,12 @@ function CEF.UI.createMainUI()
     intentMChild:SetHeight(math.max(FILTER_MENU_ROW_H, nIOpts * FILTER_MENU_ROW_H))
     local ivis = math.min(6, math.max(1, nIOpts))
     intentFilterMenu:SetHeight(8 + ivis * FILTER_MENU_ROW_H)
-    intentMScroll:SetVerticalScroll(0)
+    local maxO = math.max(0, intentMChild:GetHeight() - intentMScroll:GetHeight())
+    local cur = intentMScroll:GetVerticalScroll() or 0
+    if cur > maxO then
+      cur = maxO
+    end
+    intentMScroll:SetVerticalScroll(cur)
   end
 
   intentDropBtn:SetScript("OnClick", function()
@@ -520,6 +590,7 @@ function CEF.UI.createMainUI()
       CEF.UIFilters.hideFilterInstanceMenu(f)
       CEF.UIFilters.hideFilterRoleMenu(f)
       refreshIntentFilterMenuList()
+      intentMScroll:SetVerticalScroll(0)
       intentFilterMenu:Show()
       intentFilterMenu:Raise()
       CEF.UIFilters.syncFilterDropBlocker(f)
@@ -540,13 +611,10 @@ function CEF.UI.createMainUI()
   filterRoleDropSummaryFS:SetPoint("LEFT", 8, 0)
   filterRoleDropSummaryFS:SetPoint("RIGHT", roleDropBtn, "RIGHT", -22, 0)
   filterRoleDropSummaryFS:SetJustifyH("LEFT")
-  filterRoleDropSummaryFS:SetText(CEF.roleFilterOptionRichText(st().filterRoleKey))
+  filterRoleDropSummaryFS:SetText(CEF.roleFilterOptionRichText(st().filterRoleKeys))
 
-  local rdArrow = roleDropBtn:CreateTexture(nil, "OVERLAY")
-  rdArrow:SetTexture("Interface\\Buttons\\UI-ScrollBar-Arrow-Down-Up")
-  rdArrow:SetSize(16, 16)
-  rdArrow:SetPoint("RIGHT", roleDropBtn, "RIGHT", -5, -1)
-  rdArrow:SetVertexColor(0.95, 0.82, 0.45)
+  CEF.UIFilters.attachDropChevron(roleDropBtn, 16)
+  f.cefDropRoleBtn = roleDropBtn
 
   local roleFilterMenu = CreateFrame("Frame", nil, f)
   roleFilterMenu:SetWidth(FILTER_ROLE_DROPDOWN_W)
@@ -614,22 +682,27 @@ function CEF.UI.createMainUI()
     rrb:SetColorTexture(0.13, 0.11, 0.09, 0.96)
     rrow.bg = rrb
     rrow:SetScript("OnEnter", function()
-      rrb:SetColorTexture(0.26, 0.2, 0.14, 1)
+      CEF.UIFilters.applyFilterRowBg(rrow, true)
     end)
     rrow:SetScript("OnLeave", function()
-      rrb:SetColorTexture(0.13, 0.11, 0.09, 0.96)
+      CEF.UIFilters.applyFilterRowBg(rrow, false)
     end)
 
     local rrlab = rrow:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    rrlab:SetPoint("LEFT", 8, 0)
+    rrlab:SetPoint("LEFT", rrow, "LEFT", CEF.UIFilters.filterCheckLabelLeft(), 0)
     rrlab:SetJustifyH("LEFT")
     rrlab:SetWidth(FILTER_ROLE_DROPDOWN_W - 24)
     rrow.label = rrlab
+    CEF.UIFilters.attachFilterRowCheck(rrow)
 
     rrow:SetScript("OnClick", function(self)
-      st().filterRoleKey = self.roleKey
-      CEF.UIFilters.updateRoleFilterDropSummary(filterRoleDropSummaryFS, st().filterRoleKey)
-      CEF.UIFilters.hideFilterRoleMenu(f)
+      if self.roleKey == false or self.roleKey == nil then
+        st().filterRoleKeys = CEF.filterSetClear()
+      else
+        st().filterRoleKeys = CEF.filterSetToggle(st().filterRoleKeys, self.roleKey)
+      end
+      CEF.UIFilters.updateRoleFilterDropSummary(filterRoleDropSummaryFS, st().filterRoleKeys)
+      refreshRoleFilterMenuList()
       if scrollFrame then
         scrollFrame:SetVerticalScroll(0)
       end
@@ -640,11 +713,12 @@ function CEF.UI.createMainUI()
     rrow:Hide()
   end
 
-  local function refreshRoleFilterMenuList()
+  refreshRoleFilterMenuList = function()
     roleFilterMenu:SetWidth(roleDropBtn:GetWidth())
     local rmw = roleFilterMenu:GetWidth()
-    local rlabelW = math.max(40, rmw - 24)
+    local rlabelW = math.max(40, rmw - CEF.UIFilters.filterCheckLabelLeft() - 8)
     local ropts = CEF.ROLE_FILTER_MENU_OPTS
+    local selected = st().filterRoleKeys
     local ry = 0
     for i = 1, ROLE_FILTER_MENU_MAX_ROWS do
       local rrow = roleFilterMenuRows[i]
@@ -656,9 +730,10 @@ function CEF.UI.createMainUI()
         rrow:SetHeight(FILTER_MENU_ROW_H)
         rrow.label:SetWidth(rlabelW)
         rrow.roleKey = ropt.key
-        rrow.bg:SetColorTexture(0.13, 0.11, 0.09, 0.96)
         rrow.label:SetTextColor(1, 1, 1)
         rrow.label:SetText(ropt.label)
+        CEF.UIFilters.setFilterRowChecked(rrow, CEF.filterSetContains(selected, ropt.key), true)
+        CEF.UIFilters.applyFilterRowBg(rrow, false)
         rrow:Show()
         ry = ry + FILTER_MENU_ROW_H
       else
@@ -670,7 +745,12 @@ function CEF.UI.createMainUI()
     roleMChild:SetHeight(math.max(FILTER_MENU_ROW_H, nROpts * FILTER_MENU_ROW_H))
     local rvis = math.min(6, math.max(1, nROpts))
     roleFilterMenu:SetHeight(8 + rvis * FILTER_MENU_ROW_H)
-    roleMScroll:SetVerticalScroll(0)
+    local maxO = math.max(0, roleMChild:GetHeight() - roleMScroll:GetHeight())
+    local cur = roleMScroll:GetVerticalScroll() or 0
+    if cur > maxO then
+      cur = maxO
+    end
+    roleMScroll:SetVerticalScroll(cur)
   end
 
   roleDropBtn:SetScript("OnClick", function()
@@ -680,6 +760,7 @@ function CEF.UI.createMainUI()
       CEF.UIFilters.hideFilterInstanceMenu(f)
       CEF.UIFilters.hideFilterIntentMenu(f)
       refreshRoleFilterMenuList()
+      roleMScroll:SetVerticalScroll(0)
       roleFilterMenu:Show()
       roleFilterMenu:Raise()
       CEF.UIFilters.syncFilterDropBlocker(f)
@@ -696,7 +777,7 @@ function CEF.UI.createMainUI()
   resetBg:SetColorTexture(0.14, 0.1, 0.08, 1)
   local resetFs = resetFiltersBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   resetFs:SetAllPoints()
-  resetFs:SetText("Redefinir")
+  resetFs:SetText(CEF.L.RESET)
   resetFiltersBtn:SetScript("OnEnter", function()
     resetBg:SetColorTexture(0.22, 0.16, 0.1, 1)
   end)
@@ -705,13 +786,13 @@ function CEF.UI.createMainUI()
   end)
   resetFiltersBtn:SetScript("OnClick", function()
     CEF.UIFilters.hideAllFilterDropdowns(f)
-    st().filterInstanceKey = false
-    st().filterIntentKey = false
-    st().filterRoleKey = false
+    st().filterInstanceKeys = CEF.filterSetClear()
+    st().filterIntentKeys = CEF.filterSetClear()
+    st().filterRoleKeys = CEF.filterSetClear()
     st().filterSearchText = ""
-    CEF.UIFilters.updateFilterDropSummary(filterDropSummaryFS, false)
-    CEF.UIFilters.updateIntentFilterDropSummary(filterIntentDropSummaryFS, false)
-    CEF.UIFilters.updateRoleFilterDropSummary(filterRoleDropSummaryFS, false)
+    CEF.UIFilters.updateFilterDropSummary(filterDropSummaryFS, st().filterInstanceKeys)
+    CEF.UIFilters.updateIntentFilterDropSummary(filterIntentDropSummaryFS, st().filterIntentKeys)
+    CEF.UIFilters.updateRoleFilterDropSummary(filterRoleDropSummaryFS, st().filterRoleKeys)
     searchEdit:SetText("")
     searchEdit:ClearFocus()
     updateSearchPlaceholder()
@@ -720,6 +801,50 @@ function CEF.UI.createMainUI()
     end
     CEF.UI.refreshUI()
   end)
+
+  -- Redistribui busca + dropdowns para preencher 100% da barra (como na Guilda).
+  local LIST_FILTER_PAD_X = 10
+  local function layoutListFilterBarFill()
+    local barW = filterBar:GetWidth() or 960
+    local gaps = 4 * FILTER_SEARCH_INSTANCE_GAP
+    local fixed = FILTER_RESET_BTN_W
+    local flexTotal = barW - LIST_FILTER_PAD_X * 2 - gaps - fixed
+    if flexTotal < 280 then
+      flexTotal = 280
+    end
+    local wSearch = math.floor(math.max(140, flexTotal * 0.28) + 0.5)
+    local wInst = math.floor(math.max(120, flexTotal * 0.26) + 0.5)
+    local wIntent = math.floor(math.max(120, flexTotal * 0.26) + 0.5)
+    local wRole = math.max(100, flexTotal - wSearch - wInst - wIntent)
+
+    searchBorder:ClearAllPoints()
+    searchBorder:SetHeight(SEARCH_EDIT_H)
+    searchBorder:SetWidth(wSearch)
+    searchBorder:SetPoint("TOPLEFT", filterBar, "TOPLEFT", LIST_FILTER_PAD_X, -7)
+
+    dropBtn:ClearAllPoints()
+    dropBtn:SetHeight(SEARCH_EDIT_H)
+    dropBtn:SetWidth(wInst)
+    dropBtn:SetPoint("TOPLEFT", searchBorder, "TOPRIGHT", FILTER_SEARCH_INSTANCE_GAP, 0)
+
+    intentDropBtn:ClearAllPoints()
+    intentDropBtn:SetHeight(SEARCH_EDIT_H)
+    intentDropBtn:SetWidth(wIntent)
+    intentDropBtn:SetPoint("TOPLEFT", dropBtn, "TOPRIGHT", FILTER_SEARCH_INSTANCE_GAP, 0)
+
+    roleDropBtn:ClearAllPoints()
+    roleDropBtn:SetHeight(SEARCH_EDIT_H)
+    roleDropBtn:SetWidth(wRole)
+    roleDropBtn:SetPoint("TOPLEFT", intentDropBtn, "TOPRIGHT", FILTER_SEARCH_INSTANCE_GAP, 0)
+
+    resetFiltersBtn:ClearAllPoints()
+    resetFiltersBtn:SetSize(FILTER_RESET_BTN_W, SEARCH_EDIT_H)
+    resetFiltersBtn:SetPoint("TOPLEFT", roleDropBtn, "TOPRIGHT", FILTER_SEARCH_INSTANCE_GAP, 0)
+  end
+
+  filterBar:SetScript("OnSizeChanged", layoutListFilterBarFill)
+  layoutListFilterBarFill()
+  f.cefLayoutListFilterBar = layoutListFilterBarFill
 
   local header = CreateFrame("Frame", nil, f)
   header:SetHeight(20)
@@ -745,13 +870,13 @@ function CEF.UI.createMainUI()
   header.h5:SetJustifyH("LEFT")
   header.h6:SetJustifyH("LEFT")
 
-  header.h1:SetText("Instância / níveis")
+  header.h1:SetText(CEF.L.COL_INSTANCE_LEVELS)
   header.h2:SetText("")
   header.h2:Hide()
-  header.h3:SetText("Mensagem")
-  header.h4:SetText("Personagem")
-  header.h5:SetText("Tempo")
-  header.h6:SetText("Ação")
+  header.h3:SetText(CEF.L.COL_MESSAGE)
+  header.h4:SetText(CEF.L.COL_CHARACTER)
+  header.h5:SetText(CEF.L.COL_TIME)
+  header.h6:SetText(CEF.L.COL_ACTION)
 
   -- Mesmo recuo à direita para Lista e Termos (conteúdo + faixa da barra).
   local LIST_SCROLLBAR_GAP = 18
@@ -929,6 +1054,108 @@ function CEF.UI.createMainUI()
   settingsTopPanel:Hide()
   settingsTopPanel:SetPoint("TOPLEFT", navBar, "BOTTOMLEFT", 0, -4)
   local STP_PAD = CC.TABLE_PAD
+
+  -- Seletor de idioma (automático ou override manual).
+  local localeLabel = settingsTopPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  localeLabel:SetJustifyH("LEFT")
+  localeLabel:SetText("|cffffcc66" .. CEF.L.LOCALE_LABEL .. "|r")
+  local localeDropBtn = CreateFrame("Button", nil, settingsTopPanel)
+  localeDropBtn:SetHeight(SEARCH_EDIT_H)
+  localeDropBtn:SetWidth(220)
+  local localeDropBg = localeDropBtn:CreateTexture(nil, "BACKGROUND")
+  localeDropBg:SetAllPoints()
+  localeDropBg:SetColorTexture(0.11, 0.09, 0.07, 1)
+  local localeDropFS = localeDropBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  localeDropFS:SetPoint("LEFT", localeDropBtn, "LEFT", 8, 0)
+  localeDropFS:SetPoint("RIGHT", localeDropBtn, "RIGHT", -22, 0)
+  localeDropFS:SetJustifyH("LEFT")
+  localeDropFS:SetText(CEF.Locale.chooserSummaryText())
+  CEF.UIFilters.attachDropChevron(localeDropBtn, 16)
+  f.cefDropLocaleBtn = localeDropBtn
+  f.cefLocaleDropFS = localeDropFS
+  f.cefLocaleLabel = localeLabel
+
+  local localeMenu = CreateFrame("Frame", nil, f)
+  localeMenu:SetWidth(220)
+  localeMenu:SetFrameStrata("TOOLTIP")
+  localeMenu:SetFrameLevel(530)
+  localeMenu:EnableMouse(true)
+  localeMenu:Hide()
+  localeMenu:SetPoint("TOPLEFT", localeDropBtn, "BOTTOMLEFT", 0, -2)
+  do
+    local bg = localeMenu:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0.05, 0.048, 0.06, 0.99)
+    local br, bgc, bb, ba = 0.55, 0.45, 0.18, 0.85
+    local function edge(w, h, p1, p2, x, y)
+      local t = localeMenu:CreateTexture(nil, "BORDER")
+      t:SetSize(w, h)
+      t:SetColorTexture(br, bgc, bb, ba)
+      t:SetPoint(p1, localeMenu, p2, x, y)
+    end
+    edge(220, 1, "TOPLEFT", "TOPLEFT", 0, 0)
+    edge(220, 1, "BOTTOMLEFT", "BOTTOMLEFT", 0, 0)
+    edge(1, 1, "TOPLEFT", "TOPLEFT", 0, 0)
+  end
+  f.filterLocaleMenu = localeMenu
+  local localeMenuRows = {}
+  local function rebuildLocaleMenu()
+    for _, row in ipairs(localeMenuRows) do
+      row:Hide()
+    end
+    local opts = CEF.Locale.getChooserOptions()
+    local y = -4
+    for i, opt in ipairs(opts) do
+      local row = localeMenuRows[i]
+      if not row then
+        row = CreateFrame("Button", nil, localeMenu)
+        row:SetHeight(22)
+        local rb = row:CreateTexture(nil, "BACKGROUND")
+        rb:SetAllPoints()
+        rb:SetColorTexture(0.13, 0.11, 0.09, 0.96)
+        row.bg = rb
+        local lab = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        lab:SetPoint("LEFT", row, "LEFT", 8, 0)
+        lab:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+        lab:SetJustifyH("LEFT")
+        row.label = lab
+        row:SetScript("OnEnter", function(self)
+          self.bg:SetColorTexture(0.22, 0.18, 0.12, 1)
+        end)
+        row:SetScript("OnLeave", function(self)
+          self.bg:SetColorTexture(0.13, 0.11, 0.09, 0.96)
+        end)
+        row:SetScript("OnClick", function(self)
+          CEF.Locale.setOverride(self.optionKey)
+          localeMenu:Hide()
+          CEF.UIFilters.syncFilterDropBlocker(f)
+        end)
+        localeMenuRows[i] = row
+      end
+      row.optionKey = opt.key
+      row.label:SetText(opt.label)
+      row:ClearAllPoints()
+      row:SetPoint("TOPLEFT", localeMenu, "TOPLEFT", 4, y)
+      row:SetPoint("TOPRIGHT", localeMenu, "TOPRIGHT", -4, y)
+      row:Show()
+      y = y - 22
+    end
+    localeMenu:SetHeight(8 + #opts * 22)
+  end
+  localeDropBtn:SetScript("OnClick", function()
+    if localeMenu:IsShown() then
+      localeMenu:Hide()
+      CEF.UIFilters.syncFilterDropBlocker(f)
+    else
+      CEF.UIFilters.hideAllFilterDropdowns(f)
+      rebuildLocaleMenu()
+      localeMenu:Show()
+      localeMenu:Raise()
+      CEF.UIFilters.syncFilterDropBlocker(f)
+    end
+  end)
+  f.cefRebuildLocaleMenu = rebuildLocaleMenu
+
   local stpAboutTitle = settingsTopPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   local stpAboutBody = settingsTopPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   local stpInstTitle = settingsTopPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -939,16 +1166,10 @@ function CEF.UI.createMainUI()
   stpInstTitle:SetJustifyH("LEFT")
   stpInstBody:SetJustifyH("LEFT")
   stpInstBody:SetWordWrap(true)
-  stpAboutTitle:SetText("|cffffcc66Sobre esta página|r")
-  stpAboutBody:SetText(
-    "Referência aos padrões que o Classic Era Finder usa no chat. "
-      .. "Marcadores de raide aparecem como ícones na lista: {square}, {{circle}}, {rt6}, star, skull, etc. "
-      .. "Listas atualizam com novas versões do addon."
-  )
-  stpInstTitle:SetText("|cffffcc66Instâncias reconhecidas|r")
-  stpInstBody:SetText(
-    "Match no texto (minúsculas / maiúsculas indiferentes). Palavras-chave separadas por vírgula."
-  )
+  stpAboutTitle:SetText(CEF.L.TERMS_ABOUT_TITLE)
+  stpAboutBody:SetText(CEF.L.TERMS_ABOUT_BODY)
+  stpInstTitle:SetText(CEF.L.TERMS_INSTANCES_TITLE)
+  stpInstBody:SetText(CEF.L.TERMS_INSTANCES_BODY)
 
   local function layoutSettingsTopPanel()
     local fw = math.max(100, (f:GetWidth() or 960) - 4)
@@ -957,11 +1178,19 @@ function CEF.UI.createMainUI()
     if w < 120 then
       w = math.max(120, fw - TERMS_H_PAD * 2)
     end
+    localeLabel:SetWidth(w)
+    localeDropBtn:SetWidth(math.min(260, math.max(180, w * 0.45)))
     stpAboutTitle:SetWidth(w)
     stpAboutBody:SetWidth(w)
     stpInstTitle:SetWidth(w)
     stpInstBody:SetWidth(w)
     local y = STP_PAD
+    localeLabel:ClearAllPoints()
+    localeLabel:SetPoint("TOPLEFT", settingsTopPanel, "TOPLEFT", TERMS_H_PAD, -y)
+    y = y + localeLabel:GetStringHeight() + 6
+    localeDropBtn:ClearAllPoints()
+    localeDropBtn:SetPoint("TOPLEFT", settingsTopPanel, "TOPLEFT", TERMS_H_PAD, -y)
+    y = y + SEARCH_EDIT_H + 14
     stpAboutTitle:ClearAllPoints()
     stpAboutTitle:SetPoint("TOPLEFT", settingsTopPanel, "TOPLEFT", TERMS_H_PAD, -y)
     y = y + stpAboutTitle:GetStringHeight() + 8
@@ -1007,9 +1236,9 @@ function CEF.UI.createMainUI()
   stth1:SetJustifyH("LEFT")
   stth2:SetJustifyH("LEFT")
   stth3:SetJustifyH("LEFT")
-  stth1:SetText("|cffc8c8c8Instância / zona|r")
-  stth2:SetText("|cffc8c8c8Níveis|r")
-  stth3:SetText("|cffc8c8c8Palavras-chave|r")
+  stth1:SetText(CEF.L.TERMS_COL_INSTANCE_ZONE)
+  stth2:SetText(CEF.L.TERMS_COL_LEVELS)
+  stth3:SetText(CEF.L.TERMS_COL_KEYWORDS)
   f.settingsTermsTableHeader = settingsTermsTableHeader
 
   -- Declarado antes do layout do header: a função abaixo usa este scroll (evita global nil).
@@ -1179,22 +1408,22 @@ function CEF.UI.createMainUI()
   local COLOR_LFG_PATTERN_ST = "|cffb8d4e8"
 
   do
-    local function pushSectionTitle(txt)
+    local function pushSectionTitle(txt, localeKey)
       local fs = settingsChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
       fs:SetJustifyH("LEFT")
       fs:SetText("|cffffcc66" .. txt .. "|r")
-      settingsTermsLayoutOrder[#settingsTermsLayoutOrder + 1] = { kind = "sectionTitle", fs = fs }
+      settingsTermsLayoutOrder[#settingsTermsLayoutOrder + 1] = { kind = "sectionTitle", fs = fs, localeKey = localeKey, gold = true }
     end
 
-    local function pushParagraph(txt)
+    local function pushParagraph(txt, localeKey)
       local fs = settingsChild:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
       fs:SetJustifyH("LEFT")
       fs:SetWordWrap(true)
       fs:SetText(txt)
-      settingsTermsLayoutOrder[#settingsTermsLayoutOrder + 1] = { kind = "paragraph", fs = fs }
+      settingsTermsLayoutOrder[#settingsTermsLayoutOrder + 1] = { kind = "paragraph", fs = fs, localeKey = localeKey }
     end
 
-    local function pushCategoryBanner(txt)
+    local function pushCategoryBanner(txt, localeKey)
       local row = CreateFrame("Frame", nil, settingsChild)
       local bg = row:CreateTexture(nil, "BACKGROUND")
       bg:SetAllPoints()
@@ -1203,10 +1432,10 @@ function CEF.UI.createMainUI()
       fs:SetPoint("LEFT", row, "LEFT", TERMS_TABLE_LEFT, 0)
       fs:SetJustifyH("LEFT")
       fs:SetText("|cffffcc66" .. txt .. "|r")
-      settingsTermsLayoutOrder[#settingsTermsLayoutOrder + 1] = { kind = "banner", row = row, fs = fs }
+      settingsTermsLayoutOrder[#settingsTermsLayoutOrder + 1] = { kind = "banner", row = row, fs = fs, localeKey = localeKey, gold = true }
     end
 
-    local function pushTableHeader1(lab)
+    local function pushTableHeader1(lab, localeKey)
       local row = CreateFrame("Frame", nil, settingsChild)
       local bg = row:CreateTexture(nil, "BACKGROUND")
       bg:SetAllPoints()
@@ -1215,7 +1444,7 @@ function CEF.UI.createMainUI()
       fs:SetPoint("LEFT", row, "LEFT", TERMS_TABLE_LEFT, 0)
       fs:SetJustifyH("LEFT")
       fs:SetText("|cffc8c8c8" .. lab .. "|r")
-      settingsTermsLayoutOrder[#settingsTermsLayoutOrder + 1] = { kind = "tableHeader1", row = row, fs = fs }
+      settingsTermsLayoutOrder[#settingsTermsLayoutOrder + 1] = { kind = "tableHeader1", row = row, fs = fs, localeKey = localeKey, grey = true }
     end
 
     local function pushInstanceRow(rowData, isRaid, zebraZone)
@@ -1228,7 +1457,7 @@ function CEF.UI.createMainUI()
       fsNome:SetJustifyH("LEFT")
       fsNome:SetJustifyV("TOP")
       local nameTag = isRaid and COLOR_RAID_NAME_ST or COLOR_DG_NAME_ST
-      fsNome:SetText(nameTag .. rowData.key .. "|r")
+      fsNome:SetText(nameTag .. CEF.getInstanceDisplayName(rowData.key) .. "|r")
       local fsLvl = rf:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
       fsLvl:SetJustifyH("LEFT")
       fsLvl:SetJustifyV("TOP")
@@ -1247,10 +1476,12 @@ function CEF.UI.createMainUI()
         fsLvl = fsLvl,
         keyFs = keyFs,
         zebraZone = zebraZone,
+        instanceKey = rowData.key,
+        isRaid = isRaid,
       }
     end
 
-    local function pushOneColRow(cellText, useLfgBlue, zebraZone)
+    local function pushOneColRow(cellText, useLfgBlue, zebraZone, localeKey)
       local rf = CreateFrame("Frame", nil, settingsChild)
       local rb = rf:CreateTexture(nil, "BACKGROUND")
       rb:SetAllPoints()
@@ -1267,6 +1498,8 @@ function CEF.UI.createMainUI()
         rb = rb,
         fs = fs,
         zebraZone = zebraZone,
+        localeKey = localeKey,
+        colorPrefix = col,
       }
     end
 
@@ -1277,42 +1510,39 @@ function CEF.UI.createMainUI()
     local instCat = CEF.getInstanceDetectionCatalog()
     local grouped = CEF.getInstanceDetectionRowsGroupedSorted()
 
-    pushCategoryBanner("Masmorras")
+    pushCategoryBanner(CEF.L.CATEGORY_DUNGEONS, "CATEGORY_DUNGEONS")
     for _, row in ipairs(grouped.dungeons) do
       pushInstanceRow(row, false, 1)
     end
-    pushCategoryBanner("Raids")
+    pushCategoryBanner(CEF.L.CATEGORY_RAIDS, "CATEGORY_RAIDS")
     for _, row in ipairs(grouped.raids) do
       pushInstanceRow(row, true, 1)
     end
 
     pushSpacer12()
-    pushSectionTitle("Scarlet Monastery — frases genéricas")
-    pushParagraph(
-      "Com uma destas frases e sem asa nomeada (GY/Lib/Arm/Cath), assumem-se as 4 alas. "
-        .. "Mensagens só com «sm» como palavra (ex.: «LFG SM») contam também."
-    )
-    pushTableHeader1("Frase / fragmento")
+    pushSectionTitle(CEF.L.TERMS_SM_GENERIC_TITLE, "TERMS_SM_GENERIC_TITLE")
+    pushParagraph(CEF.L.TERMS_SM_GENERIC_BODY, "TERMS_SM_GENERIC_BODY")
+    pushTableHeader1(CEF.L.TERMS_COL_PHRASE, "TERMS_COL_PHRASE")
     for _, phrase in ipairs(instCat.scarletGenericUiHints or {}) do
-      pushOneColRow(phrase, false, 2)
+      pushOneColRow(phrase, false, 2, "TERMS_SM_AUTO_HINT")
     end
     for _, phrase in ipairs(instCat.scarletGeneric) do
       pushOneColRow(phrase, false, 2)
     end
 
     pushSpacer12()
-    pushSectionTitle("Padrões LFG (messageLooksLFG)")
-    pushParagraph("Fragmentos que ajudam a tratar a linha como anúncio de grupo (com outras regras).")
-    pushTableHeader1("Padrão / termo")
+    pushSectionTitle(CEF.L.TERMS_LFG_PATTERNS_TITLE, "TERMS_LFG_PATTERNS_TITLE")
+    pushParagraph(CEF.L.TERMS_LFG_PATTERNS_BODY, "TERMS_LFG_PATTERNS_BODY")
+    pushTableHeader1(CEF.L.TERMS_COL_PATTERN_TERM, "TERMS_COL_PATTERN_TERM")
     local msgCat = CEF.getMessageDetectionCatalog()
     for _, hint in ipairs(msgCat.lfgHints) do
       pushOneColRow(hint, true, 3)
     end
 
     pushSpacer12()
-    pushSectionTitle("Exclusões (craft / portal / enchant)")
-    pushParagraph("Não listar como anúncio de instância.")
-    pushTableHeader1("Padrão / fragmento")
+    pushSectionTitle(CEF.L.TERMS_EXCLUSIONS_TITLE, "TERMS_EXCLUSIONS_TITLE")
+    pushParagraph(CEF.L.TERMS_EXCLUSIONS_BODY, "TERMS_EXCLUSIONS_BODY")
+    pushTableHeader1(CEF.L.TERMS_COL_PATTERN_FRAGMENT, "TERMS_COL_PATTERN_FRAGMENT")
     for _, phrase in ipairs(msgCat.professionTradeExclude) do
       pushOneColRow(phrase, false, 4)
     end
@@ -1459,7 +1689,29 @@ function CEF.UI.createMainUI()
   settingsSBar:SetFrameLevel((settingsScroll:GetFrameLevel() or 0) + 8)
   settingsSBarThumb:SetFrameLevel((settingsSBar:GetFrameLevel() or 0) + 3)
 
+  if CEF.GuildUI and CEF.GuildUI.createPanels then
+    CEF.GuildUI.createPanels(f, navBar)
+  end
+  if CEF.ChatUI and CEF.ChatUI.createPanels then
+    CEF.ChatUI.createPanels(f, navBar)
+  end
+  if f.guildFilterBar then
+    f.guildFilterBar:SetFrameLevel(240)
+  end
+  if f.guildHeader then
+    f.guildHeader:SetFrameLevel(50)
+  end
+  if f.guildScrollFrame then
+    f.guildScrollFrame:SetFrameLevel(50)
+  end
+  if f.guildFooter then
+    f.guildFooter:SetFrameLevel(240)
+  end
+
   local function syncTableLayout()
+    if f.cefLayoutListFilterBar then
+      f.cefLayoutListFilterBar()
+    end
     if scrollFrame and scrollChild then
       scrollChild:SetWidth(scrollFrame:GetWidth())
     end
@@ -1483,24 +1735,41 @@ function CEF.UI.createMainUI()
   local function applyNavTab(which)
     f.cefNavTab = which
     local isList = which == "list"
+    local isGuild = which == "guild"
+    local isMessages = which == "messages"
+    local isSettings = which == "settings"
     styleNavTab(btnLista, isList)
-    styleNavTab(btnTermos, not isList)
-    if isList then
-      filterBar:Show()
-      header:Show()
-      scrollFrame:Show()
-      settingsTopPanel:Hide()
-      settingsTermsTableHeader:Hide()
-      settingsScroll:Hide()
-    else
-      CEF.UIFilters.hideAllFilterDropdowns(f)
-      filterBar:Hide()
-      header:Hide()
-      scrollFrame:Hide()
-      settingsTopPanel:Show()
-      settingsTermsTableHeader:Show()
-      settingsScroll:Show()
+    styleNavTab(btnGuilda, isGuild)
+    styleNavTab(btnMensagens, isMessages)
+    styleNavTab(btnTermos, isSettings)
+
+    CEF.UIFilters.hideAllFilterDropdowns(f)
+
+    filterBar:SetShown(isList)
+    header:SetShown(isList)
+    scrollFrame:SetShown(isList)
+
+    if f.guildFilterBar then
+      f.guildFilterBar:SetShown(isGuild)
     end
+    if f.guildHeader then
+      f.guildHeader:SetShown(isGuild)
+    end
+    if f.guildScrollFrame then
+      f.guildScrollFrame:SetShown(isGuild)
+    end
+    if f.guildFooter then
+      f.guildFooter:SetShown(isGuild)
+    end
+
+    if f.chatRoot then
+      f.chatRoot:SetShown(isMessages)
+    end
+
+    settingsTopPanel:SetShown(isSettings)
+    settingsTermsTableHeader:SetShown(isSettings)
+    settingsScroll:SetShown(isSettings)
+
     if isList then
       syncTableLayout()
       scrollFrame:SetScript("OnUpdate", function(self)
@@ -1509,6 +1778,32 @@ function CEF.UI.createMainUI()
           f.cefSyncListScroll()
         end
       end)
+    elseif isGuild then
+      if CEF.Guild then
+        if CEF.Guild.requestRoster then
+          CEF.Guild.requestRoster()
+        end
+        if CEF.Guild.refreshFromApi then
+          CEF.Guild.refreshFromApi()
+        end
+      end
+      if f.cefSyncGuildLayout then
+        f.cefSyncGuildLayout()
+      end
+      if f.guildScrollFrame then
+        f.guildScrollFrame:SetScript("OnUpdate", function(self)
+          self:SetScript("OnUpdate", nil)
+          if f.cefSyncGuildScroll then
+            f.cefSyncGuildScroll()
+          end
+        end)
+      end
+    elseif isMessages then
+      if f.cefScheduleChatLayoutSync then
+        f.cefScheduleChatLayoutSync()
+      elseif CEF.ChatUI and CEF.ChatUI.refresh then
+        CEF.ChatUI.refresh()
+      end
     else
       settingsScroll:SetScript("OnUpdate", function(self)
         self:SetScript("OnUpdate", nil)
@@ -1519,9 +1814,11 @@ function CEF.UI.createMainUI()
         end
       end)
     end
-    -- Esconde a barra da aba inativa (evita sobreposição Lista/Termos).
     if f.cefSyncListScroll then
       f.cefSyncListScroll()
+    end
+    if f.cefSyncGuildScroll then
+      f.cefSyncGuildScroll()
     end
     if f.cefSyncSettingsScroll then
       f.cefSyncSettingsScroll()
@@ -1530,6 +1827,12 @@ function CEF.UI.createMainUI()
 
   btnLista:SetScript("OnClick", function()
     applyNavTab("list")
+  end)
+  btnGuilda:SetScript("OnClick", function()
+    applyNavTab("guild")
+  end)
+  btnMensagens:SetScript("OnClick", function()
+    applyNavTab("messages")
   end)
   btnTermos:SetScript("OnClick", function()
     applyNavTab("settings")
@@ -1541,21 +1844,20 @@ function CEF.UI.createMainUI()
   local fullscreenBtn = CreateFrame("Button", nil, titleBar)
   fullscreenBtn:SetSize(30, 22)
   fullscreenBtn:SetPoint("RIGHT", close, "LEFT", -4, 0)
-  local fullBg = fullscreenBtn:CreateTexture(nil, "BACKGROUND")
-  fullBg:SetAllPoints()
-  fullBg:SetColorTexture(0.1, 0.08, 0.06, 0.65)
-  local fullFs = fullscreenBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  fullFs:SetAllPoints()
-  fullFs:SetTextColor(0.95, 0.82, 0.45)
-  fullFs:SetText("FS")
+  CEF.UIFilters.attachFullscreenIcon(fullscreenBtn)
+  f.cefFullscreenBtn = fullscreenBtn
   local function setFullscreenBtnLook(isFs)
-    fullFs:SetText(isFs and "JL" or "FS")
+    CEF.UIFilters.setFullscreenIcon(fullscreenBtn, isFs)
   end
   fullscreenBtn:SetScript("OnEnter", function()
-    fullBg:SetColorTexture(0.16, 0.12, 0.09, 0.85)
+    if fullscreenBtn.cefFsIcon and fullscreenBtn.cefFsIcon.tex then
+      fullscreenBtn.cefFsIcon.tex:SetVertexColor(1, 0.92, 0.45)
+    end
   end)
   fullscreenBtn:SetScript("OnLeave", function()
-    fullBg:SetColorTexture(0.1, 0.08, 0.06, 0.65)
+    if fullscreenBtn.cefFsIcon and fullscreenBtn.cefFsIcon.tex then
+      fullscreenBtn.cefFsIcon.tex:SetVertexColor(1.0, 0.82, 0.0)
+    end
   end)
 
   local function saveWindowedGeometry()
@@ -1582,7 +1884,8 @@ function CEF.UI.createMainUI()
     saveWindowedGeometry()
     f:ClearAllPoints()
     f:SetAllPoints(UIParent)
-    f:SetFrameStrata("HIGH")
+    f:SetFrameStrata("FULLSCREEN_DIALOG")
+    f:SetFrameLevel(0)
     f:SetMovable(false)
     titleBar:SetScript("OnDragStart", nil)
     titleBar:SetScript("OnDragStop", nil)
@@ -1594,6 +1897,18 @@ function CEF.UI.createMainUI()
     end
     if f.cefNavTab == "list" and f.cefSyncListScroll then
       f.cefSyncListScroll()
+    elseif f.cefNavTab == "guild" then
+      if f.cefScheduleGuildLayoutSync then
+        f.cefScheduleGuildLayoutSync()
+      elseif f.cefSyncGuildLayout then
+        f.cefSyncGuildLayout()
+      end
+    elseif f.cefNavTab == "messages" then
+      if f.cefScheduleChatLayoutSync then
+        f.cefScheduleChatLayoutSync()
+      elseif CEF.ChatUI and CEF.ChatUI.refresh then
+        CEF.ChatUI.refresh()
+      end
     end
   end
 
@@ -1627,6 +1942,18 @@ function CEF.UI.createMainUI()
     end
     if f.cefNavTab == "list" and f.cefSyncListScroll then
       f.cefSyncListScroll()
+    elseif f.cefNavTab == "guild" then
+      if f.cefScheduleGuildLayoutSync then
+        f.cefScheduleGuildLayoutSync()
+      elseif f.cefSyncGuildLayout then
+        f.cefSyncGuildLayout()
+      end
+    elseif f.cefNavTab == "messages" then
+      if f.cefScheduleChatLayoutSync then
+        f.cefScheduleChatLayoutSync()
+      elseif CEF.ChatUI and CEF.ChatUI.refresh then
+        CEF.ChatUI.refresh()
+      end
     end
   end
 
@@ -1647,6 +1974,17 @@ function CEF.UI.createMainUI()
   f:SetScript("OnSizeChanged", function()
     layoutSettingsTopPanel()
     syncTableLayout()
+    if f.cefNavTab == "guild" then
+      if f.cefScheduleGuildLayoutSync then
+        f.cefScheduleGuildLayoutSync()
+      elseif f.cefSyncGuildLayout then
+        f.cefSyncGuildLayout()
+      end
+    elseif f.cefNavTab == "messages" then
+      if f.cefScheduleChatLayoutSync then
+        f.cefScheduleChatLayoutSync()
+      end
+    end
     if f.cefRelayoutSettingsTerms then
       f.cefRelayoutSettingsTerms()
     end
@@ -1679,6 +2017,16 @@ function CEF.UI.createMainUI()
       if f.cefSyncListScroll and f.cefNavTab == "list" then
         f.cefSyncListScroll()
       end
+      if f.cefNavTab == "guild" then
+        if f.cefScheduleGuildLayoutSync then
+          f.cefScheduleGuildLayoutSync()
+        elseif f.cefSyncGuildLayout then
+          f.cefSyncGuildLayout()
+        end
+      end
+      if f.cefNavTab == "messages" and f.cefScheduleChatLayoutSync then
+        f.cefScheduleChatLayoutSync()
+      end
       if f.cefRelayoutSettingsTerms and f.cefNavTab == "settings" then
         f.cefRelayoutSettingsTerms()
       end
@@ -1690,6 +2038,95 @@ function CEF.UI.createMainUI()
   -- Primeira sincronização (alinha cabeçalho e renderiza)
   syncTableLayout()
   scheduleUiLayoutSync()
+
+  local function applyLocaleToFrame()
+    if CEF.clearInstanceDisplayNameCache then
+      CEF.clearInstanceDisplayNameCache()
+    end
+    if CEF.clearZoneDisplayNameCache then
+      CEF.clearZoneDisplayNameCache()
+    end
+    if CEF.refreshIntentLocaleLabels then
+      CEF.refreshIntentLocaleLabels()
+    end
+    if CEF.refreshRoleLocaleLabels then
+      CEF.refreshRoleLocaleLabels()
+    end
+    if btnLista and btnLista.fs then
+      btnLista.fs:SetText(CEF.L.TAB_LIST)
+    end
+    if btnGuilda and btnGuilda.fs then
+      btnGuilda.fs:SetText(CEF.L.TAB_GUILD)
+    end
+    if btnMensagens and btnMensagens.fs then
+      btnMensagens.fs:SetText(CEF.L.TAB_MESSAGES)
+    end
+    if btnTermos and btnTermos.fs then
+      btnTermos.fs:SetText(CEF.L.TAB_TERMS)
+    end
+    searchPlaceholder:SetText(CEF.L.SEARCH_PLACEHOLDER_LIST)
+    resetFs:SetText(CEF.L.RESET)
+    header.h1:SetText(CEF.L.COL_INSTANCE_LEVELS)
+    header.h3:SetText(CEF.L.COL_MESSAGE)
+    header.h4:SetText(CEF.L.COL_CHARACTER)
+    header.h5:SetText(CEF.L.COL_TIME)
+    header.h6:SetText(CEF.L.COL_ACTION)
+    CEF.UIFilters.updateFilterDropSummary(filterDropSummaryFS, st().filterInstanceKeys)
+    CEF.UIFilters.updateIntentFilterDropSummary(filterIntentDropSummaryFS, st().filterIntentKeys)
+    CEF.UIFilters.updateRoleFilterDropSummary(filterRoleDropSummaryFS, st().filterRoleKeys)
+    if localeLabel then
+      localeLabel:SetText("|cffffcc66" .. CEF.L.LOCALE_LABEL .. "|r")
+    end
+    if localeDropFS then
+      localeDropFS:SetText(CEF.Locale.chooserSummaryText())
+    end
+    stpAboutTitle:SetText(CEF.L.TERMS_ABOUT_TITLE)
+    stpAboutBody:SetText(CEF.L.TERMS_ABOUT_BODY)
+    stpInstTitle:SetText(CEF.L.TERMS_INSTANCES_TITLE)
+    stpInstBody:SetText(CEF.L.TERMS_INSTANCES_BODY)
+    stth1:SetText(CEF.L.TERMS_COL_INSTANCE_ZONE)
+    stth2:SetText(CEF.L.TERMS_COL_LEVELS)
+    stth3:SetText(CEF.L.TERMS_COL_KEYWORDS)
+    for _, e in ipairs(settingsTermsLayoutOrder) do
+      if e.kind == "instance" and e.fsNome and e.instanceKey then
+        local nameTag = e.isRaid and COLOR_RAID_NAME_ST or COLOR_DG_NAME_ST
+        e.fsNome:SetText(nameTag .. CEF.getInstanceDisplayName(e.instanceKey) .. "|r")
+      end
+      if e.localeKey and e.fs then
+        local t = CEF.L[e.localeKey]
+        if e.colorPrefix then
+          e.fs:SetText(e.colorPrefix .. t .. "|r")
+        elseif e.gold then
+          e.fs:SetText("|cffffcc66" .. t .. "|r")
+        elseif e.grey then
+          if type(t) == "string" and t:find("|c", 1, true) then
+            e.fs:SetText(t)
+          else
+            e.fs:SetText("|cffc8c8c8" .. t .. "|r")
+          end
+        else
+          e.fs:SetText(t)
+        end
+      end
+    end
+    layoutSettingsTopPanel()
+    if f.cefRelayoutSettingsTerms then
+      f.cefRelayoutSettingsTerms()
+    end
+    if f.cefApplyGuildLocale then
+      f.cefApplyGuildLocale()
+    end
+    if f.cefApplyChatLocale then
+      f.cefApplyChatLocale()
+    end
+    CEF.UI.refreshUI()
+    if f.cefRebuildLocaleMenu and f.filterLocaleMenu and f.filterLocaleMenu:IsShown() then
+      f.cefRebuildLocaleMenu()
+    end
+  end
+  f.cefApplyLocale = applyLocaleToFrame
+  CEF.Locale.onChanged(applyLocaleToFrame)
+
   return f
 end
 

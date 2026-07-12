@@ -5,47 +5,111 @@ ClassicEraFinder = ClassicEraFinder or {}
 local CEF = ClassicEraFinder
 
 local INTENT_FILTER_MENU_OPTS = {
-  { key = false, label = "Todos os anúncios" },
-  { key = "invite", label = "Procura grupo" },
-  { key = "whisper", label = "Procura membros" },
+  { key = false, labelKey = "FILTER_ALL_LISTINGS" },
+  { key = "invite", labelKey = "FILTER_LOOKING_FOR_GROUP" },
+  { key = "whisper", labelKey = "FILTER_LOOKING_FOR_MEMBERS" },
 }
 CEF.INTENT_FILTER_MENU_OPTS = INTENT_FILTER_MENU_OPTS
 
-function CEF.intentFilterOptionRichText(intentKey)
-  if intentKey == false or intentKey == nil then
-    return "|cffffffffTodos os anúncios|r"
-  end
+local function intentLabel(opt)
+  return (opt and opt.labelKey and CEF.L[opt.labelKey]) or (opt and opt.label) or "—"
+end
+
+function CEF.refreshIntentLocaleLabels()
   for _, opt in ipairs(INTENT_FILTER_MENU_OPTS) do
-    if opt.key == intentKey then
-      return "|cffffffff" .. opt.label .. "|r"
+    opt.label = intentLabel(opt)
+  end
+end
+
+function CEF.intentFilterOptionRichText(intentKeyOrSet)
+  if type(intentKeyOrSet) ~= "table" then
+    if intentKeyOrSet == false or intentKeyOrSet == nil then
+      return "|cffffffff" .. CEF.L.FILTER_ALL_LISTINGS .. "|r"
+    end
+    for _, opt in ipairs(INTENT_FILTER_MENU_OPTS) do
+      if opt.key == intentKeyOrSet then
+        return "|cffffffff" .. intentLabel(opt) .. "|r"
+      end
+    end
+    return "|cffffffff—|r"
+  end
+  local keys = CEF.filterSetSortedKeys(intentKeyOrSet)
+  if #keys == 0 then
+    return "|cffffffff" .. CEF.L.FILTER_ALL_LISTINGS .. "|r"
+  end
+  if #keys == 1 then
+    return CEF.intentFilterOptionRichText(keys[1])
+  end
+  local labels = {}
+  for _, k in ipairs(keys) do
+    for _, opt in ipairs(INTENT_FILTER_MENU_OPTS) do
+      if opt.key == k then
+        labels[#labels + 1] = intentLabel(opt)
+        break
+      end
     end
   end
-  return "|cffffffff—|r"
+  if #labels == 0 then
+    return "|cffffffff" .. CEF.L("FILTER_N_TYPES", #keys) .. "|r"
+  end
+  return "|cffffffff" .. table.concat(labels, ", ") .. "|r"
 end
 
 local ROLE_FILTER_MENU_OPTS = {
-  { key = false, label = "Qualquer função" },
-  { key = "tank", label = "Tank" },
-  { key = "heal", label = "Healer" },
-  { key = "dps", label = "DPS" },
+  { key = false, labelKey = "FILTER_ANY_ROLE" },
+  { key = "tank", labelKey = "FILTER_ROLE_TANK" },
+  { key = "heal", labelKey = "FILTER_ROLE_HEAL" },
+  { key = "dps", labelKey = "FILTER_ROLE_DPS" },
 }
 CEF.ROLE_FILTER_MENU_OPTS = ROLE_FILTER_MENU_OPTS
 
-function CEF.roleFilterOptionRichText(roleKey)
-  if roleKey == false or roleKey == nil then
-    return "|cffffffffQualquer função|r"
-  end
+local function roleLabel(opt)
+  return (opt and opt.labelKey and CEF.L[opt.labelKey]) or (opt and opt.label) or "—"
+end
+
+function CEF.refreshRoleLocaleLabels()
   for _, opt in ipairs(ROLE_FILTER_MENU_OPTS) do
-    if opt.key == roleKey then
-      return "|cffffffff" .. opt.label .. "|r"
+    opt.label = roleLabel(opt)
+  end
+end
+
+function CEF.roleFilterOptionRichText(roleKeyOrSet)
+  if type(roleKeyOrSet) ~= "table" then
+    if roleKeyOrSet == false or roleKeyOrSet == nil then
+      return "|cffffffff" .. CEF.L.FILTER_ANY_ROLE .. "|r"
+    end
+    for _, opt in ipairs(ROLE_FILTER_MENU_OPTS) do
+      if opt.key == roleKeyOrSet then
+        return "|cffffffff" .. roleLabel(opt) .. "|r"
+      end
+    end
+    return "|cffffffff—|r"
+  end
+  local keys = CEF.filterSetSortedKeys(roleKeyOrSet)
+  if #keys == 0 then
+    return "|cffffffff" .. CEF.L.FILTER_ANY_ROLE .. "|r"
+  end
+  if #keys == 1 then
+    return CEF.roleFilterOptionRichText(keys[1])
+  end
+  local labels = {}
+  for _, k in ipairs(keys) do
+    for _, opt in ipairs(ROLE_FILTER_MENU_OPTS) do
+      if opt.key == k then
+        labels[#labels + 1] = roleLabel(opt)
+        break
+      end
     end
   end
-  return "|cffffffff—|r"
+  if #labels == 0 then
+    return "|cffffffff" .. CEF.L("FILTER_N_ROLES", #keys) .. "|r"
+  end
+  return "|cffffffff" .. table.concat(labels, ", ") .. "|r"
 end
 
 -- Palavras que sugerem montagem de grupo / vaga
 local LFG_PLAIN = {
-  "lfg", "lfm", "lf ", "lf1", "lf2", "lf3", "looking for", "need ", "need a", "need 1", "need 2",
+  "lfg", "lfm", "lf ", "lf1", "lf1m", "lf2", "lf2m", "lf3", "lf3m", "looking for", "need ", "need a", "need 1", "need 2",
   "group for", "gtg", "forming", "wtb group", "boost", "carry",
   "procura", "preciso", "precisa", "grupo", "vaga", "tank", "heal", "healer", "dps",
   "warrior", "paladin", "druid", "rogue", "hunter", "mage", "priest", "lock", "shaman",
@@ -83,7 +147,12 @@ local PROFESSION_TRADE_EXCLUDE = {
 }
 
 local function normalizeMessage(msg)
-  if not msg then return "" end
+  if not msg then
+    return ""
+  end
+  -- NBSP UTF-8 e códigos de cor do chat (evita «dm|r» ou espaço “invisível» sem match).
+  msg = msg:gsub("\194\160", " ")
+  msg = msg:gsub("|c[%x]+", ""):gsub("|r", ""):gsub("|T[^|]+|t", "")
   msg = msg:lower():gsub("%s+", " ")
   return (msg:match("^%s*(.-)%s*$") or msg)
 end

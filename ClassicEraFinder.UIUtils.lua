@@ -139,11 +139,11 @@ function UI.cefTooltipShow(anchorFrame, entry)
   local grey = "|cffaaaaaa"
   local white = "|cffffffff"
   local instBlock = CEF.entryInstancesComboRichText(entry)
-  local meta = grey .. "Instância:|r\n" .. instBlock
+  local meta = grey .. CEF.L.TOOLTIP_INSTANCE .. "|r\n" .. instBlock
   local nameColor = UI.classColorRichPrefix(entry.guid)
-  meta = meta .. "\n\n" .. grey .. "Personagem:|r " .. nameColor .. CEF.stripRealm(entry.sender or "") .. "|r"
+  meta = meta .. "\n\n" .. grey .. CEF.L.TOOLTIP_CHARACTER .. "|r " .. nameColor .. CEF.stripRealm(entry.sender or "") .. "|r"
   if entry.channel and entry.channel ~= "" then
-    meta = meta .. "\n" .. grey .. "Canal:|r " .. white .. entry.channel .. "|r"
+    meta = meta .. "\n" .. grey .. CEF.L.TOOLTIP_CHANNEL .. "|r " .. white .. entry.channel .. "|r"
   end
   tip.meta:SetText(meta)
 
@@ -214,18 +214,18 @@ function UI.formatRelativeAge(ts)
     d = 0
   end
   if d < 8 then
-    return "agora"
+    return CEF.L.TIME_NOW
   end
   if d < 60 then
     return ("%ds"):format(d)
   end
   if d < 3600 then
-    return ("%d min"):format(math.floor(d / 60))
+    return CEF.L("TIME_MINUTES", math.floor(d / 60))
   end
   if d < 86400 then
-    return ("%d h"):format(math.floor(d / 3600))
+    return CEF.L("TIME_HOURS", math.floor(d / 3600))
   end
-  return ("%d d"):format(math.floor(d / 86400))
+  return CEF.L("TIME_DAYS", math.floor(d / 86400))
 end
 
 function UI.entryIsSelf(e)

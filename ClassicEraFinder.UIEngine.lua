@@ -132,8 +132,10 @@ function UIE.layoutRows()
         local name = ent.sender
         if self.cefIntent == "invite" then
           InviteUnit(name)
-        elseif DEFAULT_CHAT_FRAME and ChatFrame_OpenChat then
-          ChatFrame_OpenChat("/w " .. name .. " ", DEFAULT_CHAT_FRAME)
+        else
+          if CEF.UI and CEF.UI.openWhisperInHub then
+            CEF.UI.openWhisperInHub(name)
+          end
         end
       end)
 
@@ -244,9 +246,9 @@ function UIE.layoutRows()
       rf.actionBtn.cefIntent = intent
       if rf.actionBtn.actionLabel then
         if intent == "invite" then
-          rf.actionBtn.actionLabel:SetText("Convidar")
+          rf.actionBtn.actionLabel:SetText(CEF.L.INVITE)
         else
-          rf.actionBtn.actionLabel:SetText("Sussurro")
+          rf.actionBtn.actionLabel:SetText(CEF.L.WHISPER)
         end
       end
 
