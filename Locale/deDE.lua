@@ -159,7 +159,7 @@ CEF.Locale.register("deDE", {
   GROUP_CTX_PROMOTE_ASSIST = "Zum Assistenten befördern",
   GROUP_CTX_DEMOTE_ASSIST = "Assistent degradieren",
   GROUP_CTX_KICK = "Aus der Gruppe entfernen",
-  GROUP_EDIT_HINT = "Namen ziehen, um sie zwischen Gruppen zu verschieben · Rechtsklick für Aktionen",
+  GROUP_EDIT_HINT = "Namen ziehen, um sie zu verschieben oder neu zu ordnen · Rechtsklick für Aktionen",
   GROUP_ERR_COMBAT = "Gruppen können im Kampf nicht umsortiert werden.",
   GROUP_ERR_FULL = "Gruppe %d ist voll.",
   GROUP_ERR_NO_PERMISSION = "Du musst Schlachtzugsleiter oder Assistent sein.",

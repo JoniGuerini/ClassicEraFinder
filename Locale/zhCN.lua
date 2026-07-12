@@ -159,7 +159,7 @@ CEF.Locale.register("zhCN", {
   GROUP_CTX_PROMOTE_ASSIST = "提升为助理",
   GROUP_CTX_DEMOTE_ASSIST = "取消助理",
   GROUP_CTX_KICK = "移出队伍",
-  GROUP_EDIT_HINT = "拖动名字在小队间移动 · 右键查看操作",
+  GROUP_EDIT_HINT = "拖动名字移动或调整顺序 · 右键查看操作",
   GROUP_ERR_COMBAT = "战斗中无法调整小队。",
   GROUP_ERR_FULL = "第%d队已满。",
   GROUP_ERR_NO_PERMISSION = "你必须是团队队长或助理。",

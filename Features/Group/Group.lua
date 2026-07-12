@@ -303,7 +303,9 @@ function Group.swapMembers(a, b)
     return false, nil
   end
   if mockActive then
+    -- Troca posição no roster e subgrupo (cobre também a reordenação no mesmo grupo).
     a.subgroup, b.subgroup = b.subgroup, a.subgroup
+    a.raidIndex, b.raidIndex = b.raidIndex, a.raidIndex
     mockRefreshUI()
     return true
   end

@@ -159,7 +159,7 @@ CEF.Locale.register("frFR", {
   GROUP_CTX_PROMOTE_ASSIST = "Promouvoir assistant",
   GROUP_CTX_DEMOTE_ASSIST = "Rétrograder l'assistant",
   GROUP_CTX_KICK = "Renvoyer du groupe",
-  GROUP_EDIT_HINT = "Glissez les noms pour les déplacer entre les groupes · clic droit pour les actions",
+  GROUP_EDIT_HINT = "Glissez les noms pour les déplacer entre les groupes ou les réordonner · clic droit pour les actions",
   GROUP_ERR_COMBAT = "Impossible de réorganiser les groupes en combat.",
   GROUP_ERR_FULL = "Le groupe %d est plein.",
   GROUP_ERR_NO_PERMISSION = "Vous devez être chef ou assistant du raid.",

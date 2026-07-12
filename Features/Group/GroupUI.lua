@@ -465,14 +465,24 @@ local function dropTargetUnderCursor()
 end
 
 -- Semântica do drop (igual à janela de raide da Blizzard):
--- grupo com vaga → move; grupo cheio em cima de um membro → troca os dois.
+-- grupo com vaga → move; em cima de um membro (grupo cheio ou o próprio) → troca os dois.
 local function performDrop(block, slotHit)
   local src = findMemberByName(drag.memberName)
   if not src or not block or not CEF.Group.isRaid() then
     return
   end
   local targetSubgroup = block.cefSubgroup
-  if not targetSubgroup or targetSubgroup == src.subgroup then
+  if not targetSubgroup then
+    return
+  end
+  if targetSubgroup == src.subgroup then
+    -- Reordenar dentro do próprio grupo: soltar num membro troca as posições.
+    if slotHit and slotHit.cefMember and slotHit.cefMember.name ~= src.name then
+      local ok, errKey = CEF.Group.swapMembers(src, slotHit.cefMember)
+      if not ok and errKey then
+        notifyActionError(errKey)
+      end
+    end
     return
   end
   if CEF.Group.subgroupCount(targetSubgroup) < 5 then
@@ -546,14 +556,19 @@ local function dragOnUpdate()
   ghost:ClearAllPoints()
   ghost:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x + 14, y - 10)
 
-  -- Realce do bloco alvo (e da vaga, no caso de troca com grupo cheio).
+  -- Realce do alvo: bloco inteiro para outro grupo (+ vaga se cheio);
+  -- só a vaga quando é reordenação dentro do próprio grupo.
   local block, slot = dropTargetUnderCursor()
   local src = findMemberByName(drag.memberName)
   if block ~= drag.hoverBlock or slot ~= drag.hoverSlot then
     clearDragHover()
-    if block and src and block.cefSubgroup ~= src.subgroup then
-      drag.hoverBlock = block
-      if slot and slot.cefMember and CEF.Group.subgroupCount(block.cefSubgroup) >= 5 then
+    if block and src then
+      if block.cefSubgroup ~= src.subgroup then
+        drag.hoverBlock = block
+        if slot and slot.cefMember and CEF.Group.subgroupCount(block.cefSubgroup) >= 5 then
+          drag.hoverSlot = slot
+        end
+      elseif slot and slot.cefMember and slot.cefMember.name ~= src.name then
         drag.hoverSlot = slot
       end
     end
@@ -708,7 +723,9 @@ local function ensureBlocks(board)
   end
 end
 
--- Membros agrupados por subgrupo (party → tudo no bucket 1), líder/assist primeiro.
+-- Membros agrupados por subgrupo (party → tudo no bucket 1).
+-- Em raid respeita a ordem do roster (raidIndex), igual à janela da Blizzard —
+-- é ela que o líder reordena com o drag dentro do próprio grupo.
 local function membersBySubgroup()
   local buckets = {}
   for g = 1, 8 do
@@ -724,15 +741,18 @@ local function membersBySubgroup()
     bucket[#bucket + 1] = m
   end
   for g = 1, 8 do
-    table.sort(buckets[g], function(a, b)
-      if a.isLeader ~= b.isLeader then
-        return a.isLeader
-      end
-      if a.isAssist ~= b.isAssist then
-        return a.isAssist
-      end
-      return strlower(a.nameShort or "") < strlower(b.nameShort or "")
-    end)
+    if isRaid then
+      table.sort(buckets[g], function(a, b)
+        return (a.raidIndex or 0) < (b.raidIndex or 0)
+      end)
+    else
+      table.sort(buckets[g], function(a, b)
+        if a.isLeader ~= b.isLeader then
+          return a.isLeader
+        end
+        return strlower(a.nameShort or "") < strlower(b.nameShort or "")
+      end)
+    end
   end
   return buckets
 end

@@ -161,7 +161,7 @@ CEF.Locale.register("esMX", {
   GROUP_CTX_PROMOTE_ASSIST = "Ascender a asistente",
   GROUP_CTX_DEMOTE_ASSIST = "Degradar asistente",
   GROUP_CTX_KICK = "Expulsar del grupo",
-  GROUP_EDIT_HINT = "Arrastra nombres para moverlos entre grupos · clic derecho para acciones",
+  GROUP_EDIT_HINT = "Arrastra nombres para moverlos entre grupos o reordenarlos · clic derecho para acciones",
   GROUP_ERR_COMBAT = "No puedes reorganizar los grupos en combate.",
   GROUP_ERR_FULL = "El grupo %d está lleno.",
   GROUP_ERR_NO_PERMISSION = "Debes ser líder o asistente de la banda.",

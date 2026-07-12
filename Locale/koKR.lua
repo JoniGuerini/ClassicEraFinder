@@ -159,7 +159,7 @@ CEF.Locale.register("koKR", {
   GROUP_CTX_PROMOTE_ASSIST = "부파티장으로 승급",
   GROUP_CTX_DEMOTE_ASSIST = "부파티장 해제",
   GROUP_CTX_KICK = "그룹에서 제외",
-  GROUP_EDIT_HINT = "이름을 끌어 그룹 간 이동 · 우클릭으로 동작",
+  GROUP_EDIT_HINT = "이름을 끌어 이동하거나 순서 변경 · 우클릭으로 동작",
   GROUP_ERR_COMBAT = "전투 중에는 그룹을 재배치할 수 없습니다.",
   GROUP_ERR_FULL = "%d그룹이 가득 찼습니다.",
   GROUP_ERR_NO_PERMISSION = "공격대 지휘관 또는 부지휘관이어야 합니다.",
