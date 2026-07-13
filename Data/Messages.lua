@@ -285,6 +285,18 @@ function CEF.classifyMessageIntent(text)
     if t:find("lf%d+m", 1) or t:find("lf %d+m", 1) or t:find("lf%d+ m", 1) then
       return true
     end
+    -- "LF 1 tank", "LF 1-2 tanks", "LF1 heal" — pede N jogadores = recruta grupo.
+    do
+      local roleOrClass =
+        "(tank|tanks|heal|heals|healer|healers|dps|dd|dds|"
+        .. "mage|mages|lock|locks|warlock|warlocks|"
+        .. "priest|priests|pala|paladin|paladins|"
+        .. "druid|druids|rogue|rogues|hunter|hunters|"
+        .. "sham|shaman|shamans|warrior|warriors|war)"
+      if t:find("lf%s*%d+%s*%-?%s*%d*%s*" .. roleOrClass, 1) then
+        return true
+      end
+    end
     -- "lf 2 more dps", "lf1 more tank" — recrutamento (mais vagas), não LFG solo só com "lf".
     if t:find("lf %d+ more", 1) or t:find("lf%d+ more", 1) or t:find("lf%d+more", 1) then
       return true
@@ -404,7 +416,12 @@ function CEF.classifyMessageIntent(text)
   if isLfmRecruiting() and isLfgSeekingGroup() then
     return "whisper"
   end
+  -- Fallback genérico "LF …": sem número pedindo vagas (= LFG).
+  -- "LF 1 …" / "LF 1-2 …" já caiu em isLfmRecruiting acima.
   if t:find("^lf%s+", 1) and not t:find("lfm", 1, true) and not t:find("need ", 1, true) then
+    if t:find("^lf%s*%d+", 1) then
+      return "whisper"
+    end
     return "invite"
   end
   return "whisper"

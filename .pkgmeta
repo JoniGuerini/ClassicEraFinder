@@ -1,0 +1,12 @@
+# Repo root is the addon folder itself.
+ignore:
+  - .git
+  - .github
+  - .gitignore
+  - .pkgmeta
+  - README.md
+  - _tmp_locale
+  - "*.zip"
+  - "**/*.png"
+  - "**/*.psd"
+  - "**/*.md"
