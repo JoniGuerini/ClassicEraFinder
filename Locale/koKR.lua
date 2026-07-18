@@ -45,6 +45,8 @@ CEF.Locale.register("koKR", {
   LFG_UNAVAILABLE = "이 클라이언트에서는 공식 LFG API를 사용할 수 없습니다.",
   LFG_RESULT_COUNT = "등록 %d개",
   LFG_MEMBERS = "인원 %d",
+  LFG_TOOLTIP_MEMBERS = "인원: %d (%d/%d/%d)",
+  LFG_TOOLTIP_LEVEL = "%d 레벨",
   LFG_AGE_SECONDS = "%d초",
   LFG_AGE_MINUTES = "%d분",
   LFG_AGE_HOURS = "%d시간",

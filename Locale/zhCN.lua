@@ -45,6 +45,8 @@ CEF.Locale.register("zhCN", {
   LFG_UNAVAILABLE = "此客户端无法使用官方 LFG API。",
   LFG_RESULT_COUNT = "%d 个列表",
   LFG_MEMBERS = "%d 名成员",
+  LFG_TOOLTIP_MEMBERS = "成员：%d（%d/%d/%d）",
+  LFG_TOOLTIP_LEVEL = "%d级",
   LFG_AGE_SECONDS = "%d秒",
   LFG_AGE_MINUTES = "%d分钟",
   LFG_AGE_HOURS = "%d小时",

@@ -45,6 +45,8 @@ CEF.Locale.register("itIT", {
   LFG_UNAVAILABLE = "L’API LFG ufficiale non è disponibile su questo client.",
   LFG_RESULT_COUNT = "%d annunci",
   LFG_MEMBERS = "%d membri",
+  LFG_TOOLTIP_MEMBERS = "Membri: %d (%d/%d/%d)",
+  LFG_TOOLTIP_LEVEL = "Liv. %d",
   LFG_AGE_SECONDS = "%ds",
   LFG_AGE_MINUTES = "%d min",
   LFG_AGE_HOURS = "%dh",

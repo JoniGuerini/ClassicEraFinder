@@ -296,9 +296,22 @@ function GUI.refresh()
     if not rf then
       rf = CreateFrame("Frame", nil, listChild)
       rf:SetHeight(ROW_H)
+      rf:EnableMouse(true)
       local bg = rf:CreateTexture(nil, "BACKGROUND")
       bg:SetAllPoints()
       rf.bg = bg
+      rf:SetScript("OnEnter", function(self)
+        if CEF.LFG and CEF.LFG.showSearchEntryTooltip then
+          CEF.LFG.showSearchEntryTooltip(self, self.cefRow)
+        end
+      end)
+      rf:SetScript("OnLeave", function()
+        if CEF.LFG and CEF.LFG.hideSearchEntryTooltip then
+          CEF.LFG.hideSearchEntryTooltip()
+        elseif CEF.UIUtils and CEF.UIUtils.cefTooltipHide then
+          CEF.UIUtils.cefTooltipHide()
+        end
+      end)
       rf.colAct = rf:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
       rf.colAct:SetJustifyH("LEFT")
       rf.colAct:SetJustifyV("TOP")
@@ -344,6 +357,7 @@ function GUI.refresh()
     end
 
     local row = results[i]
+    rf.cefRow = row
     local rh = rowHeights[i] or ROW_H
     rf:SetWidth(childW)
     rf:SetHeight(rh)

@@ -45,6 +45,8 @@ CEF.Locale.register("ruRU", {
   LFG_UNAVAILABLE = "Официальный API LFG недоступен на этом клиенте.",
   LFG_RESULT_COUNT = "%d объявлений",
   LFG_MEMBERS = "%d участников",
+  LFG_TOOLTIP_MEMBERS = "Участники: %d (%d/%d/%d)",
+  LFG_TOOLTIP_LEVEL = "%d ур.",
   LFG_AGE_SECONDS = "%dс",
   LFG_AGE_MINUTES = "%d мин",
   LFG_AGE_HOURS = "%dч",

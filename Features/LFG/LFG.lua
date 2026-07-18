@@ -1185,6 +1185,209 @@ local function normalizeResult(resultID)
   }
 end
 
+local function normalizeAssignedRole(role)
+  if not role then
+    return "DAMAGER"
+  end
+  local r = string.upper(tostring(role))
+  if r == "TANK" then
+    return "TANK"
+  end
+  if r == "HEALER" or r == "HEAL" then
+    return "HEALER"
+  end
+  return "DAMAGER"
+end
+
+local function roleAtlasMarkup(role)
+  local atlas = ROLE_ATLAS[normalizeAssignedRole(role)] or ROLE_ATLAS.DAMAGER
+  return "|A:" .. atlas .. ":14:14|a"
+end
+
+local function classColorHex(classFilename)
+  if not classFilename or not RAID_CLASS_COLORS then
+    return "|cffffffff"
+  end
+  local c = RAID_CLASS_COLORS[classFilename] or RAID_CLASS_COLORS[string.upper(classFilename)]
+  if not c then
+    return "|cffffffff"
+  end
+  return ("|cff%02x%02x%02x"):format((c.r or 1) * 255, (c.g or 1) * 255, (c.b or 1) * 255)
+end
+
+--- Roster do anúncio (para tooltip estilo Blizzard).
+function LFG.getSearchResultMembers(resultID)
+  local out = {}
+  resultID = tonumber(resultID)
+  if not resultID or not C_LFGList then
+    return out
+  end
+  local n = 0
+  local info = C_LFGList.GetSearchResultInfo and C_LFGList.GetSearchResultInfo(resultID)
+  if type(info) == "table" then
+    n = tonumber(info.numMembers) or 0
+  end
+  if n <= 0 then
+    return out
+  end
+
+  for i = 1, n do
+    local m
+    if C_LFGList.GetSearchResultPlayerInfo then
+      local pi = C_LFGList.GetSearchResultPlayerInfo(resultID, i)
+      if type(pi) == "table" then
+        m = {
+          name = pi.name,
+          level = tonumber(pi.level),
+          classFilename = pi.classFilename,
+          className = pi.className,
+          role = normalizeAssignedRole(pi.assignedRole),
+          isLeader = pi.isLeader and true or false,
+        }
+      end
+    end
+    if not m and C_LFGList.GetSearchResultMemberInfo then
+      local a, b, c, d, e = C_LFGList.GetSearchResultMemberInfo(resultID, i)
+      if type(a) == "table" then
+        m = {
+          name = a.name,
+          level = tonumber(a.level),
+          classFilename = a.classFilename or a.classFileName,
+          className = a.className,
+          role = normalizeAssignedRole(a.assignedRole or a.role),
+          isLeader = a.isLeader and true or false,
+        }
+      elseif type(a) == "string" then
+        -- Classic: role, classFilename, className [, specName [, isLeader]]
+        m = {
+          role = normalizeAssignedRole(a),
+          classFilename = type(b) == "string" and b or nil,
+          className = type(c) == "string" and c or nil,
+          isLeader = (e == true) or (d == true),
+        }
+      end
+    end
+    if m then
+      out[#out + 1] = m
+    end
+  end
+
+  -- Se a API não marcar líder, usa o nome do líder do resultado.
+  local hasLeader = false
+  for _, m in ipairs(out) do
+    if m.isLeader then
+      hasLeader = true
+      break
+    end
+  end
+  if not hasLeader and type(info) == "table" and info.leaderName and info.leaderName ~= "" then
+    local want = strlower(tostring(info.leaderName))
+    for _, m in ipairs(out) do
+      if m.name and strlower(tostring(m.name)) == want then
+        m.isLeader = true
+        hasLeader = true
+        break
+      end
+    end
+  end
+  if not hasLeader and #out > 0 then
+    out[1].isLeader = true
+  end
+
+  return out
+end
+
+local ICON_LEADER = "|TInterface\\GroupFrame\\UI-Group-LeaderIcon:14:14:0:0|t "
+
+--- Tooltip de membros / funções / atividade (visual do addon, segue o cursor).
+function LFG.showSearchEntryTooltip(owner, row)
+  if type(row) ~= "table" then
+    return
+  end
+  if not (CEF.UIUtils and CEF.UIUtils.cefTooltipShowRich) then
+    return
+  end
+
+  local members = LFG.getSearchResultMembers(row.id)
+  local lines = {}
+  if #members == 0 then
+    local name = row.leaderName or "?"
+    lines[#lines + 1] = ICON_LEADER .. classColorHex(row.leaderClass) .. name .. "|r"
+  else
+    for _, m in ipairs(members) do
+      local display = m.name
+      if not display or display == "" then
+        display = m.className or "?"
+      end
+      local left = (m.isLeader and ICON_LEADER or "") .. classColorHex(m.classFilename) .. display .. "|r"
+      local right = ""
+      if m.level then
+        right = "|cffcccccc" .. CEF.L("LFG_TOOLTIP_LEVEL", m.level) .. "|r"
+      end
+      right = right .. (right ~= "" and "  " or "") .. roleAtlasMarkup(m.role)
+      lines[#lines + 1] = left .. "    " .. right
+    end
+  end
+
+  local grey = "|cffaaaaaa"
+  local gold = "|cffffcc66"
+  local white = "|cffffffff"
+  local counts = row.counts or {}
+  local total = tonumber(row.numMembers) or #members
+  local meta = gold
+    .. CEF.L(
+      "LFG_TOOLTIP_MEMBERS",
+      total,
+      tonumber(counts.TANK) or 0,
+      tonumber(counts.HEALER) or 0,
+      tonumber(counts.DAMAGER) or 0
+    )
+    .. "|r"
+
+  if type(row.comment) == "string" and row.comment ~= "" then
+    meta = meta .. "\n" .. white .. row.comment .. "|r"
+  end
+
+  local catLabel
+  local aids = row.activityIDs
+  if type(aids) == "table" and aids[1] and C_LFGList.GetActivityInfoTable then
+    local ai = C_LFGList.GetActivityInfoTable(aids[1])
+    if type(ai) == "table" and ai.categoryID then
+      catLabel = categoryName(ai.categoryID)
+    end
+  end
+  if catLabel and catLabel ~= "" then
+    meta = meta .. "\n\n" .. grey .. catLabel .. "|r"
+  else
+    meta = meta .. "\n"
+  end
+
+  -- Mesmas cores + range da coluna Atividade da tabela.
+  local actRich = row.activityRichText
+  if type(actRich) == "string" and actRich ~= "" and actRich ~= "—" then
+    actRich = actRich:gsub("\n\n", "\n")
+    meta = meta .. "\n" .. actRich
+  else
+    local act = tostring(row.activityName or "")
+    act = act:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    if act ~= "" then
+      meta = meta .. "\n" .. grey .. act .. "|r"
+    end
+  end
+
+  CEF.UIUtils.cefTooltipShowRich(table.concat(lines, "\n"), meta, {
+    followCursor = true,
+    minWidth = 160,
+    maxWidth = 420,
+  })
+end
+
+function LFG.hideSearchEntryTooltip()
+  if CEF.UIUtils and CEF.UIUtils.cefTooltipHide then
+    CEF.UIUtils.cefTooltipHide()
+  end
+end
+
 function LFG.isSearching()
   return searching
 end

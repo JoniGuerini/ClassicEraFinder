@@ -17,6 +17,17 @@ The live CurseForge release is always the `## Version` in `ClassicEraFinder.toc`
 
 ---
 
+## [1.1.2] - 2026-07-17
+
+### Added
+- Premade: hover tooltip with party members (leader, class colors, level, roles), member counts, and activities.
+
+### Changed
+- Premade tooltip activities use the same colors and level ranges as the Activity column.
+- Premade tooltip width scales to content (no extra empty space on short listings).
+
+---
+
 ## [1.1.1] - 2026-07-14
 
 ### Fixed

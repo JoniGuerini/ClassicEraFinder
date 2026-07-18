@@ -51,6 +51,7 @@ local cefTooltipFrame
 
 function UI.cefTooltipHide()
   if cefTooltipFrame then
+    cefTooltipFrame:SetScript("OnUpdate", nil)
     cefTooltipFrame:Hide()
   end
 end
@@ -122,19 +123,101 @@ function UI.cefTooltipEnsure()
   return f
 end
 
+local function cefTooltipPlaceAtCursor(tip)
+  local scale = UIParent:GetEffectiveScale()
+  local x, y = GetCursorPosition()
+  x, y = x / scale, y / scale
+  tip:ClearAllPoints()
+  tip:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x + 18, y + 18)
+end
+
+--- Largura da linha mais comprida (respeita |c / |T no FontString).
+local function cefTooltipMaxLineWidth(fs, text)
+  if not text or text == "" then
+    return 0
+  end
+  local maxW = 0
+  fs:SetWordWrap(false)
+  for line in string.gmatch(text .. "\n", "(.-)\n") do
+    fs:SetText(line)
+    local w = fs:GetStringWidth() or 0
+    if w > maxW then
+      maxW = w
+    end
+  end
+  return maxW
+end
+
+local function cefTooltipLayout(tip, bodyText, metaText, boxW)
+  local minW = tip.minWidth or 140
+  local maxW = tip.maxWidth or 420
+  local padSlack = 4
+
+  if not boxW or boxW <= 0 then
+    local contentW = math.max(
+      cefTooltipMaxLineWidth(tip.body, bodyText),
+      cefTooltipMaxLineWidth(tip.meta, metaText)
+    )
+    boxW = math.ceil(contentW + tip.padX * 2 + padSlack)
+  end
+  boxW = math.max(minW, math.min(maxW, boxW))
+
+  tip:SetWidth(boxW)
+  local inner = boxW - tip.padX * 2
+  tip.body:SetWordWrap(true)
+  tip.meta:SetWordWrap(true)
+  tip.body:SetWidth(inner)
+  tip.meta:SetWidth(inner)
+
+  tip.body:SetText(bodyText or "")
+  if metaText and metaText ~= "" then
+    tip.meta:SetText(metaText)
+    tip.meta:Show()
+    tip.meta:ClearAllPoints()
+    tip.meta:SetPoint("TOPLEFT", tip.body, "BOTTOMLEFT", 0, -tip.gapBodyMeta)
+  else
+    tip.meta:SetText("")
+    tip.meta:Hide()
+  end
+
+  local bodyH = tip.body:GetStringHeight() or 0
+  local metaH = (metaText and metaText ~= "") and (tip.meta:GetStringHeight() or 0) or 0
+  local gap = (metaText and metaText ~= "") and tip.gapBodyMeta or 0
+  local h = tip.padY + bodyH + gap + metaH + tip.padY + tip.heightSlack
+  tip:SetHeight(math.max(48, math.ceil(h)))
+end
+
+--- Tooltip genérico no visual do addon; por defeito segue o cursor.
+--- opts.width: número fixo, ou omitir / nil / 0 para largura ao conteúdo (min/max).
+function UI.cefTooltipShowRich(bodyText, metaText, opts)
+  if not bodyText or bodyText == "" then
+    return
+  end
+  opts = opts or {}
+  local tip = UI.cefTooltipEnsure()
+  tip.minWidth = opts.minWidth or 140
+  tip.maxWidth = opts.maxWidth or 420
+  cefTooltipLayout(tip, bodyText, metaText, opts.width)
+  cefTooltipPlaceAtCursor(tip)
+  if opts.followCursor ~= false then
+    tip:SetScript("OnUpdate", function(self)
+      if not self:IsShown() then
+        self:SetScript("OnUpdate", nil)
+        return
+      end
+      cefTooltipPlaceAtCursor(self)
+    end)
+  else
+    tip:SetScript("OnUpdate", nil)
+  end
+  tip:Show()
+end
+
 function UI.cefTooltipShow(anchorFrame, entry)
   if not entry or not entry.text then
     return
   end
   local tip = UI.cefTooltipEnsure()
-
-  local boxW = 380
-  tip:SetWidth(boxW)
-  local inner = boxW - tip.padX * 2
-  tip.body:SetWidth(inner)
-  tip.meta:SetWidth(inner)
-
-  tip.body:SetText(UI.expandChatIcons(entry.text))
 
   local grey = "|cffaaaaaa"
   local white = "|cffffffff"
@@ -145,18 +228,10 @@ function UI.cefTooltipShow(anchorFrame, entry)
   if entry.channel and entry.channel ~= "" then
     meta = meta .. "\n" .. grey .. CEF.L.TOOLTIP_CHANNEL .. "|r " .. white .. entry.channel .. "|r"
   end
-  tip.meta:SetText(meta)
 
-  local bodyH = tip.body:GetStringHeight()
-  local metaH = tip.meta:GetStringHeight()
-  local h = tip.padY + bodyH + tip.gapBodyMeta + metaH + tip.padY + tip.heightSlack
-  tip:SetHeight(math.max(48, math.ceil(h)))
-
-  local scale = UIParent:GetEffectiveScale()
-  local x, y = GetCursorPosition()
-  x, y = x / scale, y / scale
-  tip:ClearAllPoints()
-  tip:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x + 18, y + 18)
+  tip:SetScript("OnUpdate", nil)
+  cefTooltipLayout(tip, UI.expandChatIcons(entry.text), meta, 380)
+  cefTooltipPlaceAtCursor(tip)
   tip:Show()
 end
 
