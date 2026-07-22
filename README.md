@@ -71,7 +71,8 @@ A ordem de carga fica em `ClassicEraFinder.xml`. Os módulos compartilham o glob
 
 ## Requisitos
 
-- Cliente **Classic Era** (`Interface: 11508` no `.toc`)
+- Cliente **Classic Era** (`Interface: 11509` no `.toc`, patch 1.15.9)
+- Cliente **TBC Anniversary** (`Interface: 20506` no `.toc`, patch 2.5.6)
 - SavedVariables: `ClassicEraFinderDB` (histórico de lista e chat)
 
 ## Desenvolvimento
@@ -82,7 +83,7 @@ A ordem de carga fica em `ClassicEraFinder.xml`. Os módulos compartilham o glob
 
 ### Versão e releases (CurseForge)
 
-- Fonte da verdade: `## Version` em `ClassicEraFinder.toc` (hoje **1.1.2**).
+- Fonte da verdade: `## Version` em `ClassicEraFinder.toc` (hoje **1.1.3**).
 - Histórico: [`CHANGELOG.md`](CHANGELOG.md) (estilo Keep a Changelog + SemVer).
 - Antes de cada upload no CurseForge:
   1. Mover itens de `[Unreleased]` para a nova secção `## [X.Y.Z] - YYYY-MM-DD`

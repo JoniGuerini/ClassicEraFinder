@@ -17,6 +17,13 @@ The live CurseForge release is always the `## Version` in `ClassicEraFinder.toc`
 
 ---
 
+## [1.1.3] - 2026-07-22
+
+### Changed
+- TOC Interface updated for Classic Era patch **1.15.9** (`11509`). TBC Anniversary remains **2.5.6** (`20506`).
+
+---
+
 ## [1.1.2] - 2026-07-17
 
 ### Added
